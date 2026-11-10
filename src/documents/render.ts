@@ -4,10 +4,11 @@
  * the writer is escaped before it reaches the page.
  */
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { BROWSER, childEnv, DOCUMENTS, PATHS } from "../config.js";
+import { BROWSER, childEnv, DOCUMENTS } from "../config.js";
 import type { QueueEntry } from "../jobs/queue.js";
 import type { Profile } from "../profile/schema.js";
 import type { Tailored } from "./tailor.js";
@@ -100,9 +101,12 @@ export async function printPdf(html: string, outFile: string): Promise<number> {
   const htmlFile = outFile.replace(/\.pdf$/, "") + ".html";
   writeFileSync(htmlFile, html);
   if (existsSync(outFile)) unlinkSync(outFile);
+  // Chrome refuses a profile folder another Chrome holds, and a run prints the next job's documents
+  // while this one is being filled, so each print is given a folder of its own and told to drop it.
+  const profileDir = mkdtempSync(path.join(tmpdir(), "jev-print-"));
   // Chrome writes the PDF and may then linger, so the file is watched and Chrome is stopped once it is whole.
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(BROWSER.chromePath, ["--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run", "--no-pdf-header-footer", `--print-to-pdf=${outFile}`, `--user-data-dir=${path.join(PATHS.runs, "print-profile")}`, pathToFileURL(htmlFile).href], { stdio: ["ignore", "ignore", "pipe"], env: childEnv() });
+    const child = spawn(BROWSER.chromePath, ["--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run", "--no-pdf-header-footer", `--print-to-pdf=${outFile}`, `--user-data-dir=${profileDir}`, pathToFileURL(htmlFile).href], { stdio: ["ignore", "ignore", "pipe"], env: childEnv() });
     let err = "";
     let done = false;
     const finish = (fail?: Error) => {
@@ -128,6 +132,14 @@ export async function printPdf(html: string, outFile: string): Promise<number> {
       if (existsSync(outFile) && statSync(outFile).size > 0) finish();
       else finish(new Error(`printing failed${err ? `: ${err.trim().split("\n").pop()?.slice(0, 160)}` : ""}`));
     });
+  }).finally(() => {
+    // A Chrome that is still letting go of the folder leaves it in the temporary folder, which is
+    // the one place on the machine that is cleared without being asked.
+    try {
+      rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch {
+      /* left for the system to clear */
+    }
   });
   unlinkSync(htmlFile);
   return pdfPages(readFileSync(outFile));
