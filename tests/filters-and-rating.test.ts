@@ -48,6 +48,13 @@ describe("preFilter", () => {
     expect(preFilter(job({ title: "Product Manager Intern" }), now)).toMatch(/not a software role/);
     expect(preFilter(job({ title: "Software Engineer Intern, Hardware Tools" }), now)).toBeNull();
   });
+  it("keeps data, ML/AI, analytics and IT support titles", () => {
+    for (const title of ["Data Analyst, New Grad", "Data Scientist I", "Machine Learning Engineer", "AI Engineer, Early Career", "IT Support Technician", "Help Desk Analyst", "Systems Support Specialist"]) {
+      expect(preFilter(job({ title }), now), title).toBeNull();
+    }
+    expect(preFilter(job({ title: "Process Technician" }), now)).toMatch(/not a software role/);
+    expect(preFilter(job({ title: "Marketing Analyst" }), now)).toMatch(/not a software role/);
+  });
   it("rejects US roles with no sponsorship or citizenship flags, but not Canadian ones", () => {
     expect(preFilter(job({ locations: ["Austin, TX"], sponsorship: "none" }), now)).toMatch(/no sponsorship/);
     expect(preFilter(job({ locations: ["Austin, TX"], sponsorship: "citizenship" }), now)).toMatch(/citizenship/);
@@ -93,18 +100,21 @@ describe("scoreFromAnswers", () => {
   it("asks every question the scorer reads", () => {
     for (const k of Object.keys(answers())) expect(FIT_QUESTIONS).toHaveProperty(k);
   });
-  it("queues a strong, fresh Canadian internship", () => {
-    const fit = scoreFromAnswers(job(), answers(), now);
+  it("queues a strong, fresh US internship", () => {
+    const fit = scoreFromAnswers(job({ locations: ["Austin, TX"] }), answers({ work_auth: { choice: "us_sponsors" } }), now);
     expect(fit.decision).toBe("apply");
     expect(fit.score).toBeGreaterThan(DISCOVER.applyThreshold);
-    expect(fit.locationTier).toBe("canada");
+    expect(fit.locationTier).toBe("us");
   });
-  it("ranks Vancouver above the same job in the US, and fresh above stale", () => {
+  it("ranks the US above the same job in Canada, and fresh above stale", () => {
     const van = scoreFromAnswers(job({ locations: ["Vancouver, BC"] }), answers(), now).score;
     const us = scoreFromAnswers(job({ locations: ["Austin, TX"] }), answers({ work_auth: { choice: "us_sponsors" } }), now).score;
-    const stale = scoreFromAnswers(job({ locations: ["Vancouver, BC"], postedAt: "2026-09-19" }), answers(), now).score;
-    expect(van).toBeGreaterThan(us);
-    expect(van).toBeGreaterThan(stale);
+    const stale = scoreFromAnswers(job({ locations: ["Austin, TX"], postedAt: "2026-09-19" }), answers({ work_auth: { choice: "us_sponsors" } }), now).score;
+    expect(us).toBeGreaterThan(van);
+    expect(us).toBeGreaterThan(stale);
+  });
+  it("keeps a Canadian job out of the queue for a candidate who may work only in the US", () => {
+    expect(scoreFromAnswers(job({ locations: ["Vancouver, BC"] }), answers(), now).decision).toBe("below_threshold");
   });
   it("skips on the hard rules regardless of score", () => {
     expect(scoreFromAnswers(job(), answers({ is_software_role: { noul: 0.2 } }), now).skipReason).toBe("not a software role");

@@ -42,9 +42,10 @@ export function fitQuestions(profile: Pick<Profile, "education">): Questions {
 }
 
 export const FIT_QUESTIONS: Questions = {
-  is_software_role: noul("Is this a software engineering or software developer role (writing application, backend, frontend, mobile, infrastructure or platform code)?", {
-    true: "The day-to-day work is writing software",
-    false: "Hardware, data science, analytics, product, research, IT support, or anything else",
+  // The key keeps its old name so saved ratings, the report and the tests keep working. The scope is software, data, analytics, ML/AI and IT systems support.
+  is_software_role: noul("Is this a software, data, analytics, machine learning or AI role, or an IT systems support role (writing code, building data pipelines or models, analyzing data, or supporting and administering computer systems)?", {
+    true: "The day-to-day work is writing software, building data pipelines or machine learning models, analyzing data, or supporting and administering IT systems",
+    false: "Hardware or mechanical engineering, product management, sales, marketing, finance, pure academic research, or anything else",
   }),
   level: choice("What level is this posting?", {
     internship: "Internship, co-op, student or work term",

@@ -13,6 +13,10 @@ const NON_SOFTWARE_TITLE =
 /** A title that matches NON_SOFTWARE_TITLE is rescued when it also says one of these. */
 const SOFTWARE_TITLE = /software|developer|programm|full[- ]stack|backend|frontend|front[- ]end|back[- ]end|\bswe\b|web engineer|mobile engineer|platform engineer/i;
 
+/** Data, ML/AI, analytics and IT support titles are in scope too, so they rescue a NON_SOFTWARE_TITLE match. */
+const DATA_OR_IT_TITLE =
+  /\bdata\b|machine learning|\bml\b|\bai\b|analytics|artificial intelligence|\bit\b|help ?desk|desk ?side|systems? (support|admin)|support (engineer|specialist|analyst|technician)|technical support/i;
+
 const FRENCH_TITLE = /\b(stagiaire|développeur|developpeur|ingénieur|ingenieur|stage\b|alternance|poste)\b/i;
 
 const US_STATE = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
@@ -58,7 +62,7 @@ export function preFilter(
   if ((DISCOVER.unreadableAts as readonly string[]).includes(job.ats)) return `${job.ats} (its form cannot be read yet)`;
   const age = ageDays(job, now);
   if (age !== null && age > maxAgeDays) return `posted ${age} days ago`;
-  if (NON_SOFTWARE_TITLE.test(job.title) && !SOFTWARE_TITLE.test(job.title)) {
+  if (NON_SOFTWARE_TITLE.test(job.title) && !SOFTWARE_TITLE.test(job.title) && !DATA_OR_IT_TITLE.test(job.title)) {
     return "title is not a software role";
   }
   if (FRENCH_TITLE.test(job.title)) return "non-English posting";
