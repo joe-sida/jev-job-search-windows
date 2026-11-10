@@ -368,14 +368,16 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
   const coverBox = dump.fields.some((f) => COVER_LABEL.test(`${f.label} ${f.name} ${f.hint}`));
   const policy = documentPolicy();
   let docs = documentsFor(job.id, profile);
+  let tailorFailure: string | null = null;
   if ((policy.resume && !docs) || (policy.cover && coverBox && !docs?.coverText)) {
     const entry = loadQueue().entries.find((e) => e.job.id === job.id);
     if (entry) {
       try {
         docs = await tailorJob(profile, entry, { cover: policy.cover && coverBox });
       } catch (err) {
-        // A draft the truth gate refused, or a print that failed, is no reason to skip the job: the profile's own resume goes.
-        console.log(`   tailored documents not used: ${err instanceof Error ? err.message : String(err)}. Sending the profile's resume instead.`);
+        // A draft the truth gate refused, or a print that failed. Unless the profile requires a written resume for every job, the profile's own resume goes.
+        tailorFailure = err instanceof Error ? err.message : String(err);
+        console.log(`   tailored documents not used: ${tailorFailure}.${policy.resumeRequired ? " This job is held, because the profile asks for a resume written for every job." : " Sending the profile's resume instead."}`);
         docs = null;
       }
     }
@@ -410,6 +412,10 @@ async function mapFormFresh(jev: JevClient, profile: Profile, job: Job, dump: Fi
   const unnamedResume = wants.includes("resume") ? -1 : wants.indexOf("unnamed");
   fileBoxes.forEach((f, i) => {
     const want = i === unnamedResume ? "resume" : wants[i];
+    // The profile requires a resume written for every job, so a resume box without one holds the form. The profile's own file is not a stand-in.
+    if (want === "resume" && policy.resumeRequired && !docs) {
+      throw new Error(`no resume was written for this job (${tailorFailure ?? "the job is not in the queue"}), and the profile asks for one for every job, so the profile's own resume is not sent`);
+    }
     // The one transcript on file is the undergraduate one unless the profile holds a graduate degree.
     const graduate = profile.education.some((e) => /master|\bm\.?sc?\b|\bmba\b|ph\.?d|doctor/i.test(e.degree));
     const file =

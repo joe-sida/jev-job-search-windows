@@ -36,10 +36,11 @@ export type Tailored = z.infer<typeof Tailored>;
 export type Documents = { dir: string; resume: string; cover: string | null; coverText: string | null; json: string };
 
 /** What this run wants: a resume written per job, and a cover letter wherever a form has a box for one. Off unless asked. */
-let policy = { resume: false, cover: false };
+let policy: { resume: boolean; cover: boolean; resumeRequired: boolean } = { resume: false, cover: false, resumeRequired: false };
 export const documentPolicy = () => policy;
-export const setDocumentPolicy = (p: { resume: boolean; cover: boolean }) => {
-  policy = p;
+/** resumeRequired: a job that cannot get a resume written for it is held, and the profile's own resume is never sent in its place. */
+export const setDocumentPolicy = (p: { resume: boolean; cover: boolean; resumeRequired?: boolean }) => {
+  policy = { resume: p.resume, cover: p.cover, resumeRequired: !!p.resumeRequired && p.resume };
 };
 
 const SYSTEM = [

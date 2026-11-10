@@ -128,6 +128,11 @@ export const ProfileSchema = z.object({
     references: z.enum(["skip"]),
     /** "never" skips a form that requires one. "when_asked" writes a cover letter for this job whenever a form has a box for one, as if apply --cover. */
     coverLetter: z.enum(["never", "when_asked"]),
+    /**
+     * "always" writes a resume for every job and attaches that one, as if apply --tailor. It is strict:
+     * a job whose resume could not be written is held for the person, never sent with the profile's own file.
+     */
+    tailorResume: z.enum(["never", "always"]).optional(),
   }),
   resume: z.object({
     /** Absolute path on the machine that runs the browser. */
