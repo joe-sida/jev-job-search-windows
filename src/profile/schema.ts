@@ -123,6 +123,12 @@ export const ProfileSchema = z.object({
     willingToRelocate: YesNo,
     remote: z.enum(["preferred", "open", "no"]),
     preferredLocations: z.array(z.string()),
+    /**
+     * The places the person will work in: a state ("Maryland" or "MD"), a city, a metro area in
+     * their own words, or "Remote". A posting somewhere else is skipped before it is rated. Left
+     * out, or empty, nothing is narrowed by place. `preferredLocations` still orders what is kept.
+     */
+    areas: z.array(z.string()).optional(),
     howDidYouHear: z.string(),
     /** What to do when a form requires references. "skip" logs and moves on. */
     references: z.enum(["skip"]),

@@ -4,6 +4,7 @@
  * end up in the CSV so a skipped job is explainable.
  */
 import { DISCOVER } from "../config.js";
+import { inAreas } from "./areas.js";
 import { ageDays, destinationOf, type Job } from "./normalize.js";
 import { isWalled } from "./walled.js";
 
@@ -53,6 +54,8 @@ export function preFilter(
   maxAgeDays: number = DISCOVER.maxAgeDays,
   /** True for a job on an account board where the person has an account, or let the tool make one. */
   mayApplyWithAccount: (url: string) => boolean = () => false,
+  /** The places the person works in, from the profile. Empty narrows nothing. */
+  areas: readonly string[] = [],
 ): string | null {
   const link = destinationOf(job);
   if (job.ats === "workday" && !mayApplyWithAccount(link)) return "workday (needs an account per company)";
@@ -61,6 +64,7 @@ export function preFilter(
   }
   if (walled(link)) return "careers site needs an account";
   if ((DISCOVER.unreadableAts as readonly string[]).includes(job.ats)) return `${job.ats} (its form cannot be read yet)`;
+  if (!inAreas(job.locations, areas)) return "not in the places you work in";
   const age = ageDays(job, now);
   if (age !== null && age > maxAgeDays) return `posted ${age} days ago`;
   if (NON_SOFTWARE_TITLE.test(job.title) && !SOFTWARE_TITLE.test(job.title) && !DATA_OR_IT_TITLE.test(job.title)) {
