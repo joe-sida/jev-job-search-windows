@@ -129,6 +129,8 @@ export const ProfileSchema = z.object({
      * out, or empty, nothing is narrowed by place. `preferredLocations` still orders what is kept.
      */
     areas: z.array(z.string()).optional(),
+    /** What to search a site like Indeed for, in the person's own words. Left out, the general terms in DISCOVER are used. */
+    searchTerms: z.array(z.string()).optional(),
     howDidYouHear: z.string(),
     /** What to do when a form requires references. "skip" logs and moves on. */
     references: z.enum(["skip"]),

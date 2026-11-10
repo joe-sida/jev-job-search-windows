@@ -62,6 +62,7 @@ export function preFilter(
   if (job.ats === "taleo" || job.ats === "oracle" || job.ats === "successfactors" || job.ats === "icims" || job.ats === "amazon") {
     return `${job.ats} (needs an account)`;
   }
+  if (job.ats === "indeed") return "indeed (apply on the employer's own site, by hand)";
   if (walled(link)) return "careers site needs an account";
   if ((DISCOVER.unreadableAts as readonly string[]).includes(job.ats)) return `${job.ats} (its form cannot be read yet)`;
   if (!inAreas(job.locations, areas)) return "not in the places you work in";

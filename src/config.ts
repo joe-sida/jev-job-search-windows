@@ -142,6 +142,16 @@ export const DISCOVER = {
   redirectHosts: ["go.vansh.nyc", "simplify.jobs"],
   /** A shortened link's destination does not change, so it is kept for a month. */
   linkCacheMs: 30 * 24 * 60 * 60_000,
+  /**
+   * Indeed, read in the tool's own Chrome when `discover --indeed` asks for it. It answers a burst
+   * with a challenge, so its searches are run one at a time with this pause between them. What to
+   * search for comes from the profile: `preferences.searchTerms` and `preferences.areas`.
+   */
+  indeedGapMs: 4_000,
+  /** Searched for when the profile names no terms of its own. Kept general on purpose. */
+  indeedTerms: ["data analyst intern", "data engineer intern", "software engineer intern", "it support intern"],
+  /** At most this many Indeed searches in one discover, so one search stays one search. */
+  indeedMaxSearches: 12,
   /** Sources that are read from GitHub. Each entry names the raw file and its parser. */
   sources: {
     simplifyInternships:

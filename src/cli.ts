@@ -82,9 +82,10 @@ program
   .option("--no-boards", "skip polling company boards directly")
   .option("--limit <n>", "rate at most n new jobs (for a quick test)", int)
   .option("--max-age <days>", `consider postings up to this many days old (default ${DISCOVER.maxAgeDays})`, int)
+  .option("--indeed", "also read Indeed in the tool's own Chrome, for postings to apply to by hand")
   .option("--json", "print the summary as JSON")
-  .action(async (o: { boards: boolean; limit?: number; maxAge?: number; json?: boolean }) => {
-    const { queue, summary } = await discover(loadProfile(), new JevClient(), { boards: o.boards, ...(o.limit !== undefined ? { limit: o.limit } : {}), ...(o.maxAge !== undefined ? { maxAgeDays: o.maxAge } : {}), log: (l) => console.error(l) });
+  .action(async (o: { boards: boolean; limit?: number; maxAge?: number; indeed?: boolean; json?: boolean }) => {
+    const { queue, summary } = await discover(loadProfile(), new JevClient(), { boards: o.boards, ...(o.indeed ? { indeed: true } : {}), ...(o.limit !== undefined ? { limit: o.limit } : {}), ...(o.maxAge !== undefined ? { maxAgeDays: o.maxAge } : {}), log: (l) => console.error(l) });
     const top = sortEntries(queue.entries.filter((e) => e.status === "queued")).slice(0, RUN.listed);
     if (o.json) return console.log(JSON.stringify({ summary, top: top.map(brief) }, null, 2));
     console.log(`\n${summary.unique} unique postings, ${summary.preFiltered} removed by code filters, ${summary.rated} rated by JEV (${summary.reused} of them from earlier ratings).`);

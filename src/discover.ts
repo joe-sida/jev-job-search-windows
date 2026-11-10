@@ -12,6 +12,8 @@ import { capabilityFor } from "./accounts/capability.js";
 import { preFilter } from "./jobs/hardFilters.js";
 import { isWalled, learnedWalledHosts } from "./jobs/walled.js";
 import { atsFromUrl, canonicalUrl, dedupe, hostIs, type Job } from "./jobs/normalize.js";
+import { ensureBrowser } from "./browser/cdp.js";
+import { fetchIndeed, indeedSearches } from "./sources/indeed.js";
 import { entryFor, KEPT_ON_REDISCOVERY, loadQueue, mutateQueue, sortEntries, type QueueEntry, type QueueFile, type QueueStatus } from "./jobs/queue.js";
 import { withStore } from "./util/store.js";
 
@@ -49,6 +51,10 @@ export type DiscoverOptions = {
   gradYear?: number;
   /** Consider postings up to this many days old, for one search. The default is DISCOVER.maxAgeDays. */
   maxAgeDays?: number;
+  /** Also read Indeed, in the tool's own Chrome. What to search for comes from the profile. */
+  indeed?: boolean;
+  /** The searches themselves, worked out from the profile by `discover`. */
+  indeedSearches?: readonly { what: string; where: string }[];
 };
 
 export type DiscoverSummary = {
@@ -89,6 +95,14 @@ export async function collectJobs(opts: DiscoverOptions = {}): Promise<Job[]> {
         log(`[sources] ${f} failed: ${String(e)}`);
       }
     }
+  }
+
+  if (opts.indeedSearches?.length) {
+    log(`[sources] indeed: ${opts.indeedSearches.length} search(es) in the tool's own Chrome`);
+    await ensureBrowser();
+    const found = await fetchIndeed(opts.indeedSearches, { ...(opts.maxAgeDays !== undefined ? { maxAgeDays: opts.maxAgeDays } : {}), log });
+    log(`[sources] indeed contributed ${found.length} postings`);
+    jobs.push(...found);
   }
 
   if (opts.boards !== false) {
@@ -216,7 +230,7 @@ export async function discover(profile: Profile, jev: JevClient, opts: DiscoverO
   const prevById = new Map(previous.entries.map((e) => [e.job.id, e]));
 
   const gradYear = profile.education[0]?.gradYear;
-  const all = await collectJobs({ ...opts, ...(gradYear !== undefined ? { gradYear } : {}) });
+  const all = await collectJobs({ ...opts, ...(gradYear !== undefined ? { gradYear } : {}), ...(opts.indeed ? { indeedSearches: indeedSearches(profile) } : {}) });
   const learned = learnedWalledHosts();
   const us = usStatus(profile);
   const collected = all.length;
