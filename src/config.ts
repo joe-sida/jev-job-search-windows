@@ -134,6 +134,14 @@ export const DISCOVER = {
   accountWalledHosts: ["eightfold.ai", "careers.microsoft.com", "jobs.intuit.com", "jobs.ea.com"],
   /** Job boards whose forms the page scripts cannot read yet. Their jobs are skipped with that reason. */
   unreadableAts: ["smartrecruiters"],
+  /**
+   * Hosts that do nothing but redirect. A list that hands out shortened links hides which board
+   * each posting is on, and the board decides whether the tool can apply at all, so these are
+   * followed once at discovery and the destination is what everything after that reads.
+   */
+  redirectHosts: ["go.vansh.nyc", "simplify.jobs"],
+  /** A shortened link's destination does not change, so it is kept for a month. */
+  linkCacheMs: 30 * 24 * 60 * 60_000,
   /** Sources that are read from GitHub. Each entry names the raw file and its parser. */
   sources: {
     simplifyInternships:

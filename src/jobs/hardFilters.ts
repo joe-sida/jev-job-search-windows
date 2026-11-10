@@ -4,7 +4,7 @@
  * end up in the CSV so a skipped job is explainable.
  */
 import { DISCOVER } from "../config.js";
-import { ageDays, type Job } from "./normalize.js";
+import { ageDays, destinationOf, type Job } from "./normalize.js";
 import { isWalled } from "./walled.js";
 
 const NON_SOFTWARE_TITLE =
@@ -54,11 +54,12 @@ export function preFilter(
   /** True for a job on an account board where the person has an account, or let the tool make one. */
   mayApplyWithAccount: (url: string) => boolean = () => false,
 ): string | null {
-  if (job.ats === "workday" && !mayApplyWithAccount(job.url)) return "workday (needs an account per company)";
+  const link = destinationOf(job);
+  if (job.ats === "workday" && !mayApplyWithAccount(link)) return "workday (needs an account per company)";
   if (job.ats === "taleo" || job.ats === "oracle" || job.ats === "successfactors" || job.ats === "icims" || job.ats === "amazon") {
     return `${job.ats} (needs an account)`;
   }
-  if (walled(job.url)) return "careers site needs an account";
+  if (walled(link)) return "careers site needs an account";
   if ((DISCOVER.unreadableAts as readonly string[]).includes(job.ats)) return `${job.ats} (its form cannot be read yet)`;
   const age = ageDays(job, now);
   if (age !== null && age > maxAgeDays) return `posted ${age} days ago`;

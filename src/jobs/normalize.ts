@@ -17,6 +17,12 @@ export type Job = {
   company: string;
   title: string;
   url: string;
+  /**
+   * Where `url` ends up when it is only a redirector's link. The board, and so the page the form is
+   * on, are read from this. `url` stays the posting's identity, so nothing already recorded against
+   * a job moves when its link is followed for the first time.
+   */
+  destination?: string;
   ats: Ats;
   locations: string[];
   /** ISO date (YYYY-MM-DD) or null when the source does not say. */
@@ -178,29 +184,33 @@ export function greenhouseEmbedUrl(slug: string, id: string, eu = false): string
  * (`?gh_jid=`). The board's slug is not in that link, but a job found by polling the board carries
  * it in its source. Null when it cannot be worked out.
  */
-export function greenhouseFallbackUrl(job: Pick<Job, "url" | "ats" | "source">): string | null {
+export function greenhouseFallbackUrl(job: Pick<Job, "url" | "ats" | "source" | "destination">): string | null {
   if (job.ats !== "greenhouse") return null;
-  const id = /[?&]gh_jid=(\d+)/.exec(job.url)?.[1];
+  const id = /[?&]gh_jid=(\d+)/.exec(destinationOf(job))?.[1];
   const slug = /greenhouse:([a-z0-9_-]+)/i.exec(job.source)?.[1];
   return id && slug ? greenhouseEmbedUrl(slug, id) : null;
 }
 
-export function applyUrlFor(job: Pick<Job, "url" | "ats">): string {
+/** The link to work from: where the posting's own link leads, which for most jobs is that link itself. */
+export const destinationOf = (job: Pick<Job, "url" | "destination">): string => job.destination ?? job.url;
+
+export function applyUrlFor(job: Pick<Job, "url" | "ats" | "destination">): string {
+  const url = destinationOf(job);
   if (job.ats === "greenhouse") {
-    const slug = /greenhouse\.io\/(?:embed\/job_app\?for=)?([a-z0-9_-]+)/i.exec(job.url)?.[1] ?? /[?&]for=([a-z0-9_-]+)/i.exec(job.url)?.[1];
-    const id = /\/jobs\/(\d+)/.exec(job.url)?.[1] ?? /[?&](?:gh_jid|token)=(\d+)/.exec(job.url)?.[1];
-    if (slug && id && slug !== "embed") return greenhouseEmbedUrl(slug, id, /\.eu\.greenhouse\.io/i.test(job.url));
-    return job.url;
+    const slug = /greenhouse\.io\/(?:embed\/job_app\?for=)?([a-z0-9_-]+)/i.exec(url)?.[1] ?? /[?&]for=([a-z0-9_-]+)/i.exec(url)?.[1];
+    const id = /\/jobs\/(\d+)/.exec(url)?.[1] ?? /[?&](?:gh_jid|token)=(\d+)/.exec(url)?.[1];
+    if (slug && id && slug !== "embed") return greenhouseEmbedUrl(slug, id, /\.eu\.greenhouse\.io/i.test(url));
+    return url;
   }
   if (job.ats === "lever") {
-    const m = /^(https:\/\/jobs\.lever\.co\/[^/]+\/[0-9a-f-]{36})/i.exec(job.url);
-    return m ? `${m[1]}/apply` : job.url;
+    const m = /^(https:\/\/jobs\.lever\.co\/[^/]+\/[0-9a-f-]{36})/i.exec(url);
+    return m ? `${m[1]}/apply` : url;
   }
   if (job.ats === "ashby") {
-    const m = /^(https:\/\/jobs\.ashbyhq\.com\/[^/]+\/[0-9a-f-]{36})/i.exec(job.url);
-    return m ? `${m[1]}/application` : job.url;
+    const m = /^(https:\/\/jobs\.ashbyhq\.com\/[^/]+\/[0-9a-f-]{36})/i.exec(url);
+    return m ? `${m[1]}/application` : url;
   }
   // Workday: straight to the application, past the choice between "autofill" and "apply manually".
-  if (job.ats === "workday" && workday.tenantOf(job.url)) return workday.applicationUrl(job.url);
-  return job.url;
+  if (job.ats === "workday" && workday.tenantOf(url)) return workday.applicationUrl(url);
+  return url;
 }

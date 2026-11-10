@@ -59,6 +59,47 @@ export async function getText(url: string, opts: GetOptions = {}): Promise<strin
   }
 }
 
+/**
+ * Where a link ends up once its redirects have been followed. The public lists hand out shortened
+ * links that hide which board a posting is on, and the board decides whether the tool can apply at
+ * all. Cached on disk, because a shortened link's destination does not change. A link that cannot
+ * be followed comes back unchanged, so a posting is never lost to a redirector having a bad day.
+ */
+export async function resolveUrl(url: string, opts: { timeoutMs?: number; cacheMs?: number } = {}): Promise<string> {
+  const cacheMs = opts.cacheMs ?? DISCOVER.linkCacheMs;
+  const cacheFile = cacheMs > 0 ? path.join(PATHS.cache, "links", createHash("sha1").update(url).digest("hex")) : null;
+  if (cacheFile && existsSync(cacheFile)) {
+    try {
+      const { at, to } = JSON.parse(readFileSync(cacheFile, "utf8")) as { at: number; to: string };
+      if (Date.now() - at < cacheMs) return to;
+    } catch {
+      /* fall through and follow it again */
+    }
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DISCOVER.fetchTimeoutMs);
+  const headers = { "User-Agent": USER_AGENT };
+  try {
+    // HEAD first, which a redirector answers without sending a page. Some answer only a GET, and
+    // then the body is dropped unread: the destination is the response's own URL, not its content.
+    let res = await fetch(url, { method: "HEAD", redirect: "follow", headers, signal: controller.signal });
+    if (!res.ok || res.url === url) {
+      res = await fetch(url, { redirect: "follow", headers, signal: controller.signal });
+      await res.body?.cancel();
+    }
+    const to = res.url || url;
+    if (cacheFile) {
+      mkdirSync(path.dirname(cacheFile), { recursive: true });
+      writeFileSync(cacheFile, JSON.stringify({ at: Date.now(), to }));
+    }
+    return to;
+  } catch {
+    return url;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function getJson<T = unknown>(url: string, opts: GetOptions = {}): Promise<T> {
   const text = await getText(url, opts);
   return JSON.parse(text) as T;

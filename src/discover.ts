@@ -11,7 +11,7 @@ import { describe } from "./jobs/describe.js";
 import { capabilityFor } from "./accounts/capability.js";
 import { preFilter } from "./jobs/hardFilters.js";
 import { isWalled, learnedWalledHosts } from "./jobs/walled.js";
-import { dedupe, type Job } from "./jobs/normalize.js";
+import { atsFromUrl, canonicalUrl, dedupe, hostIs, type Job } from "./jobs/normalize.js";
 import { entryFor, KEPT_ON_REDISCOVERY, loadQueue, mutateQueue, sortEntries, type QueueEntry, type QueueFile, type QueueStatus } from "./jobs/queue.js";
 import { withStore } from "./util/store.js";
 
@@ -31,7 +31,7 @@ import { boardsFromJobs, type Board } from "./sources/companies.js";
 import { fetchReadmeSources } from "./sources/githubReadme.js";
 import { fetchSimplify } from "./sources/simplify.js";
 import { importSheet } from "./sources/sheetImport.js";
-import { mapLimit } from "./util/http.js";
+import { mapLimit, resolveUrl } from "./util/http.js";
 
 export const EARLY_CAREER_TITLE = /\b(intern|internship|co-?op|new grad|new graduate|early career|early-career|entry[- ]level|junior|graduate|university|student|campus|associate software|software engineer i\b|engineer i\b|swe i\b)\b/i;
 
@@ -108,7 +108,50 @@ export async function collectJobs(opts: DiscoverOptions = {}): Promise<Job[]> {
     });
     log(`[sources] boards contributed ${fromBoards} early-career postings`);
   }
-  return dedupe(jobs);
+  return dedupe(await resolveRedirects(jobs, log));
+}
+
+/**
+ * Follows the links that only redirect, and reads the board from where each one lands.
+ *
+ * A list that hands out shortened links hides which board every one of its postings is on. Until
+ * the link is followed they all look like a board the tool has never met: a Workday that wants an
+ * account per employer is rated and then tried like any other, three minutes at a time, and the
+ * boards the tool fills well are not recognized as themselves. Following the link once, here, puts
+ * every posting in front of the filters that already know what to do with it.
+ *
+ * The posting keeps its own link as its identity, so nothing already recorded against a job moves
+ * the first time that job's link is followed. A link that cannot be followed is left as it was.
+ */
+export async function resolveRedirects(jobs: Job[], log: (s: string) => void = () => {}, follow: (url: string) => Promise<string> = resolveUrl): Promise<Job[]> {
+  const redirector = (url: string) => {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      return DISCOVER.redirectHosts.some((d) => hostIs(host, d));
+    } catch {
+      return false;
+    }
+  };
+  const shortened = jobs.filter((j) => !j.destination && redirector(j.url));
+  if (shortened.length === 0) return jobs;
+  log(`[sources] following ${shortened.length} shortened links`);
+  const followed = await mapLimit(shortened, DISCOVER.fetchConcurrency, (j: Job) => follow(j.url));
+  const to = new Map<Job, string>();
+  followed.forEach((r, i) => {
+    const job = shortened[i] as Job;
+    if (r.ok && r.value && r.value !== job.url && !redirector(r.value)) to.set(job, r.value);
+  });
+  const boards = new Map<string, number>();
+  const out = jobs.map((job) => {
+    const dest = to.get(job);
+    if (!dest) return job;
+    const ats = atsFromUrl(dest);
+    boards.set(ats, (boards.get(ats) ?? 0) + 1);
+    return { ...job, destination: canonicalUrl(dest), ats };
+  });
+  const named = [...boards].sort((a, b) => b[1] - a[1]).map(([ats, n]) => `${ats} ${n}`);
+  log(`[sources] ${to.size} followed, which are: ${named.join(", ") || "none"}`);
+  return out;
 }
 
 /** What a search decided about one posting. */
