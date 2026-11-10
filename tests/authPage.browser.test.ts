@@ -5,7 +5,7 @@
  * another site is stopped at the hop. Skipped where Chrome is not installed.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,6 +20,7 @@ import { workday } from "../src/accounts/workday.js";
 import { Page, sleep, type Target } from "../src/browser/cdp.js";
 import { dump, goto, install } from "../src/browser/session.js";
 import { ACCOUNTS, BROWSER, childEnv } from "../src/config.js";
+import { stopChrome } from "./helpers/chrome.js";
 import { startMockBoard, type MockBoard } from "./helpers/workdayMock.js";
 
 // Made up for the test, and sent only to a server on this machine.
@@ -53,10 +54,8 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the sign-in in a real browser"
   }, 30_000);
 
   afterAll(async () => {
-    chrome?.kill();
+    await stopChrome(chrome, profile);
     await Promise.all(boards.map((b) => b.close()));
-    await sleep(300);
-    rmSync(profile, { recursive: true, force: true });
   });
 
   /** A fresh, private tab on a fresh mock board, with the adapter pointed at that board. */

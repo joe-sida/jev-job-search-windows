@@ -4,7 +4,7 @@
  * "remember" only for a question that may be kept. Skipped where Chrome is not installed.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as netServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -16,6 +16,7 @@ import { buildReport } from "../src/report/data.js";
 import type { Needs } from "../src/report/needs.js";
 import { reportPage } from "../src/report/page.js";
 import { Policy } from "../src/run/policy.js";
+import { stopChrome } from "./helpers/chrome.js";
 
 const TOKEN = "made-up-token-for-the-test";
 const needs: Needs = {
@@ -83,10 +84,8 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
   }, 30_000);
 
   afterAll(async () => {
-    chrome?.kill();
+    await stopChrome(chrome, profile);
     await new Promise<void>((r) => server.close(() => r()));
-    await sleep(300);
-    rmSync(profile, { recursive: true, force: true });
   });
 
   it("draws its screens, and sends an answer with the token and only what was typed", async () => {

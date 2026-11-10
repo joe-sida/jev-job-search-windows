@@ -60,18 +60,20 @@ where you may already have saved it when you signed in:
 From then on, when that Chrome has filled the sign-in page in, the tool
 presses Sign In. It types nothing and never reads the password. A sign-in
 the employer refuses is not tried again. `/accounts browser acme --off`
-takes it back. The second way keeps the password in your Keychain:
+takes it back. The second way keeps the password in your system's
+credential store:
 
 ```
 /accounts password <employer>
 ```
 
-A window opens on your Mac. You type that employer's password there,
-twice, hidden. It goes into your Mac's Keychain under that employer's
-name and is never shown, written to a file, or sent to Claude or JEV. Do
-not paste a password into a chat.
+A window opens on your machine. You type that employer's password there,
+twice, hidden. It goes into your Mac's Keychain, or on Windows into a file
+the system has sealed for your account alone, under that employer's name,
+and is never shown, written to a file in this folder, or sent to Claude or
+JEV. Do not paste a password into a chat.
 
-Each employer has its own password in the Keychain. If you use one
+Each employer has its own password in the credential store. If you use one
 password on several accounts you already had, `/accounts password` with
 no employer stores that one, and it is tried once at an employer that has
 none of its own.
@@ -100,9 +102,9 @@ A marketing or newsletter box is never ticked. At most 3 new accounts are
 made in a day.
 
 **You choose no password.** Each new account gets its own long random
-password, made by the tool and kept in your Keychain before anything is
+password, made by the tool and kept in your credential store before anything is
 typed. No two employers share one. To sign in by hand later, open
-**Keychain Access**, search for `jev-job-search`, and look at the item
+**Keychain Access** on a Mac, search for `jev-job-search`, and look at the item
 named `account:workday:<employer>`, or use the employer's "Forgot your
 password?" link.
 
@@ -193,7 +195,7 @@ employer.
   settings, the stored passwords and the sessions stay, so `/accounts on`
   brings everything back. Workday jobs are skipped while it is off.
 - **`/accounts forget <employer>`**, or `all`, removes what this Mac
-  holds: the entry, that account's password in the Keychain, what the tool
+  holds: the entry, that account's password in the credential store, what the tool
   remembered about it, and its sign-in session in the tool's Chrome.
   `all` also removes the standing rule.
 
@@ -288,9 +290,9 @@ never written to a file.
 | What | Where | In git? |
 |---|---|---|
 | What you allowed, and one entry per employer account | `data/accounts.json` | Never. `data/accounts.example.json` shows the shape |
-| Each employer account's password | macOS Keychain, service `jev-job-search`, item `account:workday:<employer>` | No file at all |
-| The password for accounts you already had, if you stored one | macOS Keychain, item `accounts-password` | No file at all |
-| Gmail's long-lived token and your client's secret | macOS Keychain, same service | No file at all |
+| Each employer account's password | macOS Keychain, service `jev-job-search`, item `account:workday:<employer>`. On Windows, a sealed file under `%LOCALAPPDATA%\jev-job-search\secrets` | No file in this folder |
+| The password for accounts you already had, if you stored one | The same store, item `accounts-password` | No file in this folder |
+| Gmail's long-lived token and your client's secret | The same store | No file in this folder |
 | Which Gmail address is connected | `data/gmail.json` | Never |
 | When each account last signed in, tries today, pauses, accounts made per day | `data/runs/accounts-state.json` | Never |
 | Ids of verification emails already used | `data/runs/verifications.json` | Never |
@@ -298,7 +300,7 @@ never written to a file.
 
 `data/accounts.json` holds no secret. You can read it and edit it.
 
-On a machine with no Keychain, a password is read from `.env`
+On a machine with no credential store of its own, a password is read from `.env`
 (`JEV_ACCOUNTS_PASSWORD` for the shared one), new accounts cannot be made,
 and Gmail cannot be connected.
 

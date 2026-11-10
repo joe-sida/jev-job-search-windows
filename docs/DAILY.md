@@ -121,10 +121,17 @@ Nothing runs by itself until you install the schedule, with
 npx jev schedule install --at 09:00
 ```
 
-This adds one entry to macOS's own scheduler for your account (a
-LaunchAgent at `~/Library/LaunchAgents/com.jev-job-search.daily.plist`)
-that runs `jev daily` in this folder at that time each day. What it prints
-goes to `data/runs/daily.log`.
+This adds one entry to your own account in the system's scheduler, which
+runs `jev daily` in this folder at that time each day. What it prints goes
+to `data/runs/daily.log`.
+
+On a Mac that entry is a LaunchAgent at
+`~/Library/LaunchAgents/com.jev-job-search.daily.plist`. On Windows it is a
+task named `com.jev-job-search.daily` in Task Scheduler, registered from
+`data/runs/com.jev-job-search.daily.xml` and starting the one-line
+`data/runs/com.jev-job-search.daily.cmd` next to it. Neither needs an
+administrator, and both run as you and only while you are signed in. You can
+see the Windows one with `taskschd.msc` under Task Scheduler Library.
 
 ```bash
 npx jev schedule status
@@ -136,8 +143,9 @@ npx jev schedule remove
 
 Things to know:
 
-- The Mac must be on and you must be signed in at that time. A Mac that
-  was asleep runs the job when it wakes.
+- The machine must be on and you must be signed in at that time. A Mac
+  that was asleep runs the job when it wakes. Windows skips a run it
+  missed, so a PC that was off or signed out does not catch up.
 - The tool's Chrome window opens on your screen while it works.
 - Claude Code must be signed in, or `ANTHROPIC_API_KEY` set, as for
   `/apply`.

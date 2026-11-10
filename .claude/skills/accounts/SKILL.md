@@ -64,12 +64,12 @@ Say that this is experimental before asking. Each is a separate yes:
    Gmail connected. Without it you click each link. (`--verify-email`)
 
 They choose no password: each new account gets its own random one, kept in
-their Keychain. `--max-new 3` is the default.
+their credential store. `--max-new 3` is the default.
 
 ## What you never do
 
 - **Never ask for, read, type or repeat a password, a code or a token**,
-  in chat, in a file or in a command. Never read the Keychain, `.env` or
+  in chat, in a file or in a command. Never read the credential store, `.env` or
   the tool's Chrome profile.
 - **Never start anything that signs in or signs up at an employer.** That
   is `accounts signin`, `accounts setup`, `apply` on a Workday job in a

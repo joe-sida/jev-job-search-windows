@@ -1,12 +1,13 @@
 /**
  * Asking the person for the one password their job-board accounts use, in a window of their own
- * Mac. They type it twice, hidden. It goes from that window to this process and from here into
- * the Keychain: it is never printed, never an argument of a command, and never seen by Claude.
- * A window works from anywhere the command is started, a terminal or a skill, which a prompt in
- * the terminal does not.
+ * machine. They type it twice, hidden. It goes from that window to this process and from here into
+ * the system's credential store: it is never printed, never an argument of a command, and never
+ * seen by Claude. A window works from anywhere the command is started, a terminal or a skill,
+ * which a prompt in the terminal does not.
  */
 import { spawnSync } from "node:child_process";
 import { ACCOUNTS, childEnv } from "../config.js";
+import { isWindows, powershell, PS_STDOUT, secretStoreName } from "../util/platform.js";
 import { Secret } from "../util/redact.js";
 import { passwordProblems } from "./secrets.js";
 
@@ -27,21 +28,74 @@ const macDialog: Dialog = (message) => {
   return r.status === 0 ? (r.stdout ?? "").replace(/\n$/, "") : null;
 };
 
+/**
+ * The same window on Windows: a dialog with one hidden box, drawn by PowerShell. The words reach
+ * it through the environment, never as part of the script, and what was typed comes back on
+ * standard output. It gives up after the same time the Mac one does.
+ */
+const WINDOWS_SCRIPT = `$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+$form = New-Object System.Windows.Forms.Form
+$form.Text = 'jev-job-search'
+$form.FormBorderStyle = 'FixedDialog'
+$form.StartPosition = 'CenterScreen'
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.TopMost = $true
+$form.ClientSize = New-Object System.Drawing.Size(470, 250)
+$label = New-Object System.Windows.Forms.Label
+$label.Text = $env:JEV_ASK_MESSAGE
+$label.SetBounds(16, 16, 438, 166)
+$box = New-Object System.Windows.Forms.TextBox
+$box.UseSystemPasswordChar = $true
+$box.SetBounds(16, 186, 438, 24)
+$save = New-Object System.Windows.Forms.Button
+$save.Text = 'Save'
+$save.DialogResult = [System.Windows.Forms.DialogResult]::OK
+$save.SetBounds(278, 216, 84, 26)
+$cancel = New-Object System.Windows.Forms.Button
+$cancel.Text = 'Cancel'
+$cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+$cancel.SetBounds(370, 216, 84, 26)
+$form.Controls.AddRange(@($label, $box, $save, $cancel))
+$form.AcceptButton = $save
+$form.CancelButton = $cancel
+$form.Add_Shown({ $form.Activate(); $box.Focus() })
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = [int]$env:JEV_ASK_SECONDS * 1000
+$timer.Add_Tick({ $timer.Stop(); $form.DialogResult = [System.Windows.Forms.DialogResult]::Cancel; $form.Close() })
+$timer.Start()
+$answer = $form.ShowDialog()
+$timer.Stop()
+if ($answer -ne [System.Windows.Forms.DialogResult]::OK) { exit 1 }
+$out = ${PS_STDOUT}
+$out.Write($box.Text)
+$out.Flush()`;
+
+const windowsDialog: Dialog = (message) => {
+  const { command, args } = powershell(WINDOWS_SCRIPT);
+  const r = spawnSync(command, args, { encoding: "utf8", env: childEnv({ JEV_ASK_MESSAGE: message, JEV_ASK_SECONDS: String(ACCOUNTS.askSeconds) }) });
+  return r.status === 0 ? (r.stdout ?? "") : null;
+};
+
+/** The window this system draws. */
+const systemDialog: Dialog = (message) => (isWindows ? windowsDialog(message) : macDialog(message));
+
 export type Asked = { ok: true; password: Secret } | { ok: false; why: "cancelled" | "mismatch" | "rules"; problems?: string[] };
 
 /**
  * Asks for the password and its repeat, and checks it against the board's rules before anything
  * is stored. A password that misses a rule is asked for again, with the rule named, a few times.
  */
-export function askPassword(dialog: Dialog = macDialog, o: { what?: string; existing?: boolean } = {}): Asked {
-  // A password that already works at an employer is taken as it is. Only what the Keychain cannot hand back as typed is refused.
+export function askPassword(dialog: Dialog = systemDialog, o: { what?: string; existing?: boolean } = {}): Asked {
+  // A password that already works at an employer is taken as it is. Only what the store cannot hand back as typed is refused.
   const check = (p: Secret) => passwordProblems(p).filter((x) => !o.existing || /plain keyboard/.test(x));
   const rules = o.existing ? "Type it exactly as you use it there." : "Workday wants 8 or more characters with a digit, a lower-case letter, an upper-case letter and a special character.";
   const what = o.what ?? "The one password for your job-board accounts.";
   let note = "";
   let last: Asked = { ok: false, why: "cancelled" };
   for (let round = 0; round < ACCOUNTS.askRounds; round++) {
-    const first = dialog(`${note}${what}\n\nIt goes into your Mac's Keychain. It is not shown, not saved in a file, and never sent to Claude or JEV.\n\n${rules}`);
+    const first = dialog(`${note}${what}\n\nIt goes into ${secretStoreName()}. It is not shown, not saved in a file, and never sent to Claude or JEV.\n\n${rules}`);
     if (first === null) return { ok: false, why: "cancelled" };
     const password = new Secret(first);
     const problems = check(password);

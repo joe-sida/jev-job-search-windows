@@ -1,4 +1,4 @@
-# Setup (macOS)
+# Setup (macOS and Windows)
 
 *About twenty minutes the first time. Last verified 2026-10-02.*
 
@@ -27,10 +27,21 @@ The rest of this page is the same setup done by hand.
 
 ## 1. Prerequisites
 
-- **Node 22 or newer**: `node --version`. Install from nodejs.org or `brew install node`.
+- **Node 22 or newer**: `node --version`. Install from nodejs.org, or
+  `brew install node` on a Mac, or `winget install OpenJS.NodeJS.LTS` on
+  Windows.
 - **Google Chrome**. The runner starts its own window with its own profile; your everyday Chrome is not touched.
 - **Claude**, one of two ways. Either **Claude Code** installed and signed in with `/login`: the tool runs it headless (`claude -p`) on Sonnet 5.5 at low effort, on your subscription. Or a **Claude API key** in `.env` as `ANTHROPIC_API_KEY`: the tool calls the Claude API directly, billed to the key. The skills need Claude Code; the commands work either way.
 - An **OpenRouter** account and key from https://openrouter.ai/keys. Put a few dollars of credit on it; a full run costs cents.
+
+On Windows that is all: no WSL, no extra tools. Run the commands on this
+page in **PowerShell**, where `cp` and the other names used below work as
+written. The three things the system itself provides are picked up for you:
+Chrome wherever it is installed, PowerShell for the password window and the
+notifications, and Task Scheduler for the daily run. If Chrome is somewhere
+unusual, set `JEV_CHROME_PATH` to its `chrome.exe`; if `claude` was not
+installed with npm and the tool cannot find it, set `JEV_CLAUDE_PATH` to its
+`claude.exe`.
 
 ## 2. Clone and install
 
@@ -179,8 +190,9 @@ Your `data/` files are untouched by updates.
 | `OPENROUTER_API_KEY is not set` | Create `.env` as in step 3 |
 | An answer is stale after you changed something on the form by hand | `npx jev apply --fresh <id>`, or `memory --forget <company>` |
 | `No profile at data/profile.json` | Step 4 |
-| `Chrome did not start on port 9333` | Install Google Chrome, or set `BROWSER.chromePath` in `src/config.ts` |
-| `could not run claude` | Install Claude Code and run `claude` once to log in, or put `ANTHROPIC_API_KEY` in `.env` |
+| `Chrome did not start on port 9333` | Install Google Chrome, or set `JEV_CHROME_PATH` to its binary (`chrome.exe` on Windows) |
+| `could not run claude` | Install Claude Code and run `claude` once to log in, or put `ANTHROPIC_API_KEY` in `.env`. On Windows, if it is installed but not found, set `JEV_CLAUDE_PATH` to its `claude.exe` |
+| Windows: `the password window did not open` | PowerShell is blocked by a policy. Store the password in the terminal instead: `npx jev accounts password --terminal` |
 | A form comes back `blocked: no form found` | The page was a login, a closed posting, or a board the runner does not walk yet. The reason is in the CSV |
 | A form comes back `filled, not ready` | The reason names the field. Add a standing answer to the profile, or finish it by hand in the window and `submit <id> --force` |
 | Forms on one site start failing with `refused` | The site is rate-limiting. Wait a few minutes; add its host to `RUN.gentleHosts` |

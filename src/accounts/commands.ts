@@ -1,7 +1,7 @@
 /**
  * What the `accounts` command does, apart from the terminal: set the standing rule for a
  * provider, add one employer, say what is set up, lift a pause, forget an account. The password
- * itself is typed by the person into the Keychain's own prompt and never passes through here.
+ * itself is typed by the person into the credential store's own prompt and never passes through here.
  */
 import { ACCOUNTS } from "../config.js";
 import { accountId } from "./auth.js";
@@ -21,7 +21,7 @@ export type Consent = {
 };
 type Files = { accounts?: string; state?: string };
 
-/** The one password, by its name in the secret store: the Keychain on a Mac, JEV_ACCOUNTS_PASSWORD in .env elsewhere. */
+/** The one password, by its name in the secret store: the Keychain on a Mac, a sealed file on Windows, JEV_ACCOUNTS_PASSWORD in .env elsewhere. */
 const secretRef = (): Account["secret"] => ({ keychain: ACCOUNTS.passwordItem });
 
 /** The standing rule for every employer on a provider. */
@@ -123,7 +123,7 @@ export function forgetAccounts(which: string, store: SecretStore, files: Files =
 /** What a set of answers lets the tool do, in plain words, for the person to read before it is saved. */
 export function describeConsent(c: Consent, where: string): string[] {
   const out = [`For ${where}, as ${c.email}:`, "  - The tool signs in to an account you have there, when it holds that account's password or a session you started."];
-  if (c.create) out.push(`  - EXPERIMENTAL. Where you have no account, the tool makes one: your address, and a password it makes up for that employer alone and keeps in your Keychain. At most ${c.maxNew ?? ACCOUNTS.maxNewAccountsPerDay} new accounts a day. Each one is a real account with that employer, in your name.`);
+  if (c.create) out.push(`  - EXPERIMENTAL. Where you have no account, the tool makes one: your address, and a password it makes up for that employer alone and keeps in your credential store. At most ${c.maxNew ?? ACCOUNTS.maxNewAccountsPerDay} new accounts a day. Each one is a real account with that employer, in your name.`);
   else out.push("  - Where you have no account, nothing is made. The job is left for you.");
   if (c.create) out.push(c.terms ? "  - It ticks the box that accepts the employer's candidate-account terms, for you. You are agreeing to each employer's terms without reading them one by one. A marketing box is never ticked." : "  - It does not accept account terms. A sign-up that asks for them is left open for you.");
   if (c.create) out.push(c.verifyEmail ? "  - EXPERIMENTAL. It reads the one email an employer sends to prove your address, through Gmail if you connected it, and opens its link. Otherwise you click the link." : "  - You click the link in each employer's verification email yourself.");
@@ -159,7 +159,7 @@ export function describeAccounts(store: SecretStore, files: Files = {}, now = ne
     lines.push("Workday, any employer: no standing rule. The tool uses only the employers listed below.");
   }
   const shared = store.get(ACCOUNTS.passwordItem);
-  if (shared) lines.push(`A password for accounts you already had is stored${passwordProblems(shared).some((p) => /plain keyboard/.test(p)) ? ", but it holds a character the Keychain cannot hand back as typed" : ""}. It is tried once at an employer that has no password of its own.`);
+  if (shared) lines.push(`A password for accounts you already had is stored${passwordProblems(shared).some((p) => /plain keyboard/.test(p)) ? ", but it holds a character the credential store cannot hand back as typed" : ""}. It is tried once at an employer that has no password of its own.`);
   if (!f.accounts.length) lines.push("No employer account yet. To sign in to one yourself, once: /accounts signin <employer or link>");
   for (const a of f.accounts) {
     const st = stateOf(s, a.id);

@@ -1,7 +1,7 @@
 /**
  * The person's Gmail, read only, with their consent. The connection is Google's own sign-in for
  * installed apps: the person approves in their browser, the answer comes back to this machine on
- * a loopback address, and the long-lived token goes into the Keychain. The tool asks for one
+ * a loopback address, and the long-lived token goes into the system's credential store. The tool asks for one
  * permission, to read mail. It cannot send, change or delete anything.
  *
  * Tokens are Secrets from the moment they arrive. Nothing here prints a reply from Google.
@@ -14,6 +14,7 @@ import type { AddressInfo } from "node:net";
 import { z } from "zod";
 import { childEnv, GMAIL, PATHS } from "../config.js";
 import type { SecretStore } from "../accounts/secrets.js";
+import { openCommand } from "../util/platform.js";
 import { Secret } from "../util/redact.js";
 import { writeAtomic } from "../util/store.js";
 import type { Mail, MailClient } from "./verification.js";
@@ -49,12 +50,13 @@ async function token(fetcher: Fetch, body: Record<string, string>): Promise<z.in
 
 /** Opens a link in the person's own browser. */
 const openLink = (url: string) => {
-  if (process.platform === "darwin") spawn("/usr/bin/open", [url], { stdio: "ignore", detached: true, env: childEnv() }).unref();
+  const open = openCommand(url);
+  if (open) spawn(open.command, open.args, { stdio: "ignore", detached: true, env: childEnv() }).unref();
 };
 
 /**
  * Connects a Gmail mailbox. `clientFile` is the JSON Google Cloud gives for a Desktop app OAuth
- * client: its secret goes to the Keychain and the file is no longer needed. The person approves
+ * client: its secret goes to the credential store and the file is no longer needed. The person approves
  * in their own browser. Returns the address of the mailbox that was connected.
  */
 export async function connect(store: SecretStore, opts: { clientFile?: string; file?: string; fetcher?: Fetch; open?: (url: string) => void; say?: (line: string) => void } = {}): Promise<string> {

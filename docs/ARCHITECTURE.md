@@ -70,7 +70,7 @@ Timing on 2026-10-02: 4,748 unique postings, 478 rated, 61 seconds, $0.075.
 | `src/forms/mapForm.ts` | Asking JEV what goes in each field |
 | `src/answers/` | The writer (headless Claude Code, or the Claude API on a key), the answer memory, drafts and voice |
 | `src/documents/` | Tailored resumes and cover letters: the writer's draft, the truth gate (`unsupportedClaims`), HTML rendered to PDF through Chrome (`printPdf`) |
-| `src/accounts/` | Boards that want an account: what the person allowed (`config.ts`), the Keychain (`secrets.ts`), the sign-in itself (`auth.ts`), one adapter per board (`workday.ts`), whether a job may be taken (`capability.ts`) |
+| `src/accounts/` | Boards that want an account: what the person allowed (`config.ts`), the credential store (`secrets.ts`), the sign-in itself (`auth.ts`), one adapter per board (`workday.ts`), whether a job may be taken (`capability.ts`) |
 | `src/mail/` | Gmail, read-only (`gmail.ts`), and finding the one verification email an account asked for (`verification.ts`) |
 | `src/knowledge/sites.ts` | What the tool has learned about each site |
 | `src/log/` | The record files and the cost summary |
@@ -268,7 +268,7 @@ JEV spend. A human check pauses that board until the next local day
 (`data/runs/board-pauses.json`), and the second board to ask stops the
 run. The summary is appended to `data/runs/daily-<date>.json`.
 
-`src/run/schedule.ts` writes one LaunchAgent that starts `jev daily`. It
+`src/run/schedule.ts` writes one LaunchAgent on a Mac, or one Task Scheduler task on Windows, that starts `jev daily`. It
 holds the path to Node, the project folder, the time and a search path,
 and nothing else.
 
@@ -340,7 +340,8 @@ What keeps it safe:
   held, through the browser's `Fetch` domain, to the allowed origins. A
   redirect elsewhere fails at the redirect and never reaches the other site.
 - Passwords and tokens come from a `SecretStore` (`secrets.ts`) as a
-  `Secret`: the macOS Keychain through `/usr/bin/security`, a value going
+  `Secret`: the macOS Keychain through `/usr/bin/security`, or on Windows a
+  file the system has sealed for that account alone, a value going
   in on standard input and never as an argument.
 - `capabilityFor` decides before any page is opened: `can`, `wait` (the
   day's limit, a paused account) or `no`. `accountGate` gives `takeJobs`
@@ -466,11 +467,11 @@ part of correctness.
 | `data/runs/<id>.plan.json`, `<id>.report.json` | the dump and plan of the current page, and the verified result | the apply loop | `resolve`, `inspect`, `submit`, `survey` |
 | `data/runs/browser-session.json` | which tab holds which job | `fill` | every later step |
 | `data/policy.json` | `Policy` v1: the standing instructions for `daily` | the person, `/daily` | `daily`, `schedule install` |
-| `data/runs/daily-<date>.json`, `data/runs/daily.log` | each daily run's summary; what the scheduled run printed | `daily`, the LaunchAgent | the person, `/daily` |
+| `data/runs/daily-<date>.json`, `data/runs/daily.log` | each daily run's summary; what the scheduled run printed | `daily`, the system's scheduler | the person, `/daily` |
 | `data/runs/board-pauses.json` | boards `daily` leaves alone until a date | `daily` | `daily` |
 | `data/accounts.json` | `AccountsFile` v1: what the person allowed, one entry per employer account. No secret | `accounts`, the sign-in | the sign-in, `capabilityFor`, discover |
 | `data/runs/accounts-state.json` | last sign-in, tries today, pauses, accounts made per day | the sign-in | the sign-in, `capabilityFor` |
-| `data/gmail.json` | the connected address and the OAuth client id. The tokens are in the Keychain | `gmail connect` | the verifier |
+| `data/gmail.json` | the connected address and the OAuth client id. The tokens are in the credential store | `gmail connect` | the verifier |
 | `data/runs/verifications.json` | ids of verification emails already used | the verifier | the verifier |
 | `data/runs/chrome-profile/` | the runner's Chrome profile | Chrome | Chrome |
 

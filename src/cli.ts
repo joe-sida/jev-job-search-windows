@@ -35,6 +35,7 @@ import { goto } from "./browser/session.js";
 import { defaultStore, itemFor } from "./accounts/secrets.js";
 import { askPassword } from "./accounts/ask.js";
 import { connect as connectGmail, disconnect as disconnectGmail, loadGmail } from "./mail/gmail.js";
+import { isMac, isWindows, openCommand, secretStoreName } from "./util/platform.js";
 import { installRedaction } from "./util/redact.js";
 import { discover } from "./discover.js";
 import { formatChecks, isReadyToRun, nextStep, runChecks } from "./doctor.js";
@@ -64,6 +65,12 @@ const program = new Command();
 program.name("jev-job-search").description("Find and rate software jobs with JEV, fill and check each application form in Chrome, and let Claude write what needs writing.").version("1.6.0");
 
 const int = (v: string) => parseInt(v, 10);
+/** Opens a file or a link with whatever this system opens it with. Nothing to open with is not an error. */
+const openWithSystem = (target: string): void => {
+  const open = openCommand(target);
+  if (open) spawn(open.command, open.args, { stdio: "ignore", detached: true, env: childEnv() }).unref();
+};
+
 const whereTheRecordIs = () => `Applications you sent: ${PATHS.applied}\nJobs left for you to do by hand: ${PATHS.manual}\nTake-home assignments to do: ${PATHS.takehome}\nEvery job considered: ${PATHS.applications}`;
 
 // ---------------------------------------------------------------- find jobs
@@ -142,11 +149,17 @@ async function idsFromLinks(given: string[]): Promise<string[]> {
   return out;
 }
 
-/** What this run does about documents: a tailored resume only on request (--tailor), a cover letter on request or when the profile says when_asked. A cover letter never swaps in a tailored resume. */
+/**
+ * What this run does about documents: a tailored resume on request (--tailor) or when the profile says
+ * tailorResume is always, a cover letter on request or when the profile says when_asked. A cover letter
+ * never swaps in a tailored resume. With tailorResume always, a job whose resume cannot be written is held.
+ */
 const documentsFromOptions = (o: { tailor?: boolean; cover?: boolean; plain?: boolean }) => {
   if (o.plain) return setDocumentPolicy({ resume: false, cover: false });
-  const cover = !!o.cover || loadProfile().preferences.coverLetter === "when_asked";
-  setDocumentPolicy({ resume: !!o.tailor, cover });
+  const prefs = loadProfile().preferences;
+  const cover = !!o.cover || prefs.coverLetter === "when_asked";
+  const always = prefs.tailorResume === "always";
+  setDocumentPolicy({ resume: !!o.tailor || always, cover, resumeRequired: always });
 };
 
 program
@@ -254,7 +267,7 @@ program
       console.log(removeSchedule() ? "The schedule is removed. Nothing runs by itself now." : "No schedule was installed.");
     } else if (action === "status") {
       const s = scheduleStatus();
-      console.log(s.installed ? `A daily run is scheduled${s.loaded ? "" : ", but macOS has not loaded it. Install it again: npx jev schedule install"}. Its file: ${s.file}` : "Nothing is scheduled. The daily run only happens when you run it: npx jev daily");
+      console.log(s.installed ? `A daily run is scheduled${s.loaded ? "" : ", but the system has not loaded it. Install it again: npx jev schedule install"}. Its file: ${s.file}` : "Nothing is scheduled. The daily run only happens when you run it: npx jev daily");
     } else {
       console.log("The actions are: install, remove, status");
     }
@@ -293,7 +306,7 @@ program
         if (d.cover) console.log(`   cover letter: ${d.cover}`);
         if (d.tailored.keywordsCovered.length) console.log(`   covers: ${d.tailored.keywordsCovered.slice(0, 12).join(", ")}`);
         if (d.tailored.keywordsMissing.length) console.log(`   the posting also wants, and your profile does not say: ${d.tailored.keywordsMissing.slice(0, 8).join(", ")}`);
-        if (o.open) for (const f of [d.resume, d.cover]) if (f) spawn("open", [f], { stdio: "ignore", detached: true, env: childEnv() }).unref();
+        if (o.open) for (const f of [d.resume, d.cover]) if (f) openWithSystem(f);
       } catch (err) {
         console.log(`== ${e.job.company} | ${e.job.title} [${e.job.id}]  not written: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -313,12 +326,12 @@ program
     if (o.static) {
       writeFileSync(o.static, reportPage(buildReport(loadRows())));
       console.log(`Wrote ${o.static}`);
-      if (o.open) spawn("open", [o.static], { stdio: "ignore", detached: true, env: childEnv() }).unref();
+      if (o.open) openWithSystem(o.static);
       return;
     }
     const address = await startReportServer(o.port);
     console.log(`Dashboard at ${address}  (Ctrl-C to stop)`);
-    if (o.open) spawn("open", [address], { stdio: "ignore", detached: true, env: childEnv() }).unref();
+    if (o.open) openWithSystem(address);
   });
 
 program
@@ -503,7 +516,7 @@ program
       return show();
     }
     if (action === "password") {
-      if (process.platform !== "darwin") return console.log("This machine has no Keychain. Put the password in .env as JEV_ACCOUNTS_PASSWORD=...");
+      if (!isMac && !isWindows) return console.log("This machine has no credential store. Put the password in .env as JEV_ACCOUNTS_PASSWORD=...");
       // With an employer: that account's own password. Without: the one tried at accounts you already had.
       let item: string = ACCOUNTS.passwordItem;
       let what = "The password you use on job-board accounts you already have.";
@@ -519,13 +532,13 @@ program
         console.log(`${what} Type it below. It is not shown.`);
         if (!store.setByPerson(item)) return console.log("Nothing was stored.");
       } else {
-        console.log("A window on your Mac is asking for the password. Type it there, twice. It goes into your Keychain and is never shown here.");
+        console.log(`A window is asking for the password. Type it there, twice. It goes into ${secretStoreName()} and is never shown here.`);
         const asked = askPassword(undefined, { what, existing: true });
         if (!asked.ok) return console.log(asked.why === "cancelled" ? "Nothing was stored: the window was closed or left unanswered." : asked.why === "mismatch" ? "Nothing was stored: the two did not match. Run it again." : `Nothing was stored: the password needs ${(asked.problems ?? []).join(", ")}.`);
         store.set(item, asked.password);
       }
       clearPauses({}, id || undefined);
-      return console.log(`Stored in your Keychain${id ? `, and the pause on ${id} is lifted` : ""}. Then: /resume`);
+      return console.log(`Stored in ${secretStoreName()}${id ? `, and the pause on ${id} is lifted` : ""}. Then: /resume`);
     }
     if (action === "signin" || action === "setup") {
       if (!target) return console.log(`Say where: /accounts ${action} <employer or a link to one of its postings>`);
@@ -587,7 +600,7 @@ program
 
 program
   .command("gmail <action>")
-  .description("Let the tool read the email a job board sends to prove your address when an account is made. connect | status | disconnect. Read-only access, kept in your Keychain")
+  .description("Let the tool read the email a job board sends to prove your address when an account is made. connect | status | disconnect. Read-only access, kept in your system's credential store")
   .option("--client <file>", "with connect: the OAuth client file Google Cloud gave you (a Desktop app client)")
   .action(async (action: string, o: { client?: string }) => {
     const store = defaultStore();
@@ -597,10 +610,10 @@ program
     } else if (action === "status") {
       const g = loadGmail();
       if (!g) return console.log("Gmail is not connected. To connect it: npx jev gmail connect --client <file>. docs/ACCOUNTS.md has the steps.");
-      console.log(`Connected: ${g.email}, read-only, since ${g.connectedAt.slice(0, 10)}. Token: ${store.get(GMAIL.refreshTokenItem) ? "in the Keychain" : "missing. Connect again: npx jev gmail connect"}`);
+      console.log(`Connected: ${g.email}, read-only, since ${g.connectedAt.slice(0, 10)}. Token: ${store.get(GMAIL.refreshTokenItem) ? "in the credential store" : "missing. Connect again: npx jev gmail connect"}`);
     } else if (action === "disconnect") {
       await disconnectGmail(store);
-      console.log("Gmail is disconnected: access was withdrawn at Google and the tokens are gone from the Keychain.");
+      console.log("Gmail is disconnected: access was withdrawn at Google and the tokens are gone from the credential store.");
     } else {
       console.log("The actions are: connect, status, disconnect");
     }
@@ -708,7 +721,7 @@ program
     const file = o.all ? PATHS.applications : o.manual ? PATHS.manual : PATHS.applied;
     if (o.open) {
       if (!existsSync(file)) return console.log(`Nothing to open yet. ${file} is created by the first discover run.`);
-      if (process.platform === "darwin") spawn("open", [file], { stdio: "ignore", detached: true, env: childEnv() }).unref();
+      openWithSystem(file);
       return console.log(file);
     }
     if (o.manual) {

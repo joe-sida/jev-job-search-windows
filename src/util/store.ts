@@ -70,7 +70,15 @@ export function withLock<T>(name: string, fn: () => T, dir = PATHS.locks): T {
       closeSync(fd);
       break;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      const code = (err as NodeJS.ErrnoException).code;
+      // Windows answers EPERM, or EACCES, for a lock file another process is deleting at that
+      // moment: the same "someone else has it" as EEXIST, and gone a moment later.
+      if (code === "EPERM" || code === "EACCES") {
+        if (Date.now() > deadline) throw err;
+        pause(STORE.lockPollMs);
+        continue;
+      }
+      if (code !== "EEXIST") throw err;
       const body = readLock(file);
       if (!body || !alive(body.pid) || Date.now() - body.at > STORE.lockStaleMs) {
         try {

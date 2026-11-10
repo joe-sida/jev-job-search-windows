@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromePath, resolveCommand } from "./util/platform.js";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -161,12 +162,16 @@ export const FIT_WEIGHTS = {
   interviewPractical: 0.05,
 } as const;
 
+/**
+ * Where a role ranks, for a candidate authorized to work in the United States only. Canada and
+ * anywhere else are set low enough that the composite score falls under `DISCOVER.applyThreshold`.
+ */
 export const LOCATION_MULTIPLIER = {
-  vancouver: 1.0,
-  canada: 0.92,
+  vancouver: 0.2,
+  canada: 0.2,
   remote: 0.9,
-  us: 0.75,
-  international: 0.6,
+  us: 1.0,
+  international: 0.2,
   unclear: 0.7,
 } as const;
 
@@ -227,8 +232,11 @@ export const CACHE = {
 } as const;
 
 export const BROWSER = {
-  /** The Chrome binary the fill runner drives over the DevTools protocol. */
-  chromePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  /**
+   * The Chrome binary the fill runner drives over the DevTools protocol: the usual place for this
+   * system, or JEV_CHROME_PATH when Chrome is somewhere else (see src/util/platform.ts).
+   */
+  chromePath: chromePath(),
   /** Local DevTools port of the runner's own Chrome window. */
   port: 9333,
   /** Its profile lives with the other run data, so it is git-ignored and keeps cookies between runs. */
@@ -294,6 +302,13 @@ export const WRITER = {
    */
   apiPricesPerMillion: { input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15 },
 } as const;
+
+/**
+ * The program Claude Code is started as. On a Mac the name on the PATH is enough. On Windows the
+ * name on the PATH is a `claude.cmd`, which Node refuses to start, so the program it stands for is
+ * looked up. JEV_CLAUDE_PATH wins, for a Claude Code in a place this does not find.
+ */
+export const writerCommand = (): string => process.env.JEV_CLAUDE_PATH?.trim() || resolveCommand(WRITER.command);
 
 /** Tailored resumes and cover letters, written per job from the profile and rendered to PDF by the runner's Chrome. */
 export const DOCUMENTS = {
@@ -374,14 +389,14 @@ export const DAILY = {
   maxMinutes: 90,
   /** The most JEV may cost in a day before the run stops, when the policy names no number. */
   jevBudgetUsd: 0.5,
-  /** The name the scheduled run is registered under with macOS, and the time it runs when none is given. */
+  /** The name the scheduled run is registered under with the system's own scheduler, and the time it runs when none is given. */
   label: "com.jev-job-search.daily",
   at: "09:00",
 } as const;
 
 /** Signing in to job boards the person has an account on, and making an account where they allowed it (`src/accounts/`). */
 export const ACCOUNTS = {
-  /** The name every secret is kept under in the Keychain. */
+  /** The name every secret is kept under: the service in the Keychain, the folder in the Windows credential store. */
   keychainService: "jev-job-search",
   /** The one password used for employer accounts, set with `jev accounts password`. */
   passwordItem: "accounts-password",
@@ -434,7 +449,7 @@ export const GMAIL = {
 
 /** Help for the person when a form waits on them (`src/run/assist.ts`). */
 export const ASSIST = {
-  /** Post a notification on the Mac. */
+  /** Post a notification: Notification Centre on a Mac, a notification from the tray on Windows. */
   notify: true,
   /** For an emailed human-check code, open the person's own mail at a search for it. The tool reads no mail for this. */
   openMail: true,
@@ -443,7 +458,61 @@ export const ASSIST = {
 
 /** What a child process may inherit from the environment. Keys and passwords are not on the list, so no child ever sees one. */
 export const CHILD_ENV = {
-  allow: ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TZ", "CLAUDE_CONFIG_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS", "__CF_USER_TEXT_ENCODING", "DISPLAY"],
+  allow: [
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TERM",
+    "TZ",
+    "CLAUDE_CONFIG_DIR",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY",
+    "https_proxy",
+    "http_proxy",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "NODE_EXTRA_CA_CERTS",
+    "__CF_USER_TEXT_ENCODING",
+    "DISPLAY",
+    // Windows: a program started without these does not run at all. None of them holds a secret:
+    // they say where the system is, where this account's folders are, and how a name becomes a program.
+    "SystemRoot",
+    "SystemDrive",
+    "windir",
+    "ComSpec",
+    "PATHEXT",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "ProgramData",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "ProgramW6432",
+    "CommonProgramFiles",
+    "CommonProgramFiles(x86)",
+    "PUBLIC",
+    "USERPROFILE",
+    "USERNAME",
+    "USERDOMAIN",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "TEMP",
+    "TMP",
+    "PSModulePath",
+    "PROCESSOR_ARCHITECTURE",
+    "NUMBER_OF_PROCESSORS",
+    "OS",
+    "SESSIONNAME",
+  ],
 } as const;
 
 /** The environment for a child process: the allowed names only, plus what the caller adds on purpose. */

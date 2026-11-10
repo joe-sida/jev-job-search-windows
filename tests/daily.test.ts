@@ -6,7 +6,7 @@ import { DAILY } from "../src/config.js";
 import type { QueueEntry } from "../src/jobs/queue.js";
 import { boardOf, clearStop, countToday, dailyRun, formatDaily, loadPauses, localDay, pauseBoard, requestStop, saveDaily, stopRequested, type DailyDeps, type Outcome } from "../src/run/daily.js";
 import { loadPolicy, Policy, policyRefuses } from "../src/run/policy.js";
-import { agentPlist, installSchedule, removeSchedule, scheduleStatus, timeOfDay } from "../src/run/schedule.js";
+import { agentPlist, installSchedule, removeSchedule, scheduleStatus, taskWrapper, taskXml, timeOfDay } from "../src/run/schedule.js";
 
 const START = new Date(2026, 9, 5, 9, 0, 0);
 const TODAY = localDay(START);
@@ -281,6 +281,20 @@ describe("the schedule", () => {
     expect(text).not.toMatch(/--submit|KEY|TOKEN|PASSWORD/);
   });
 
+  it("writes a Windows task that runs `jev daily` in the project folder, and nothing more", () => {
+    const wrapper = taskWrapper({ node: "C:\\Program Files\\nodejs\\node.exe", root: "C:\\Users\\someone\\jev", log: "C:\\Users\\someone\\jev\\data\\runs\\daily.log" });
+    // Every path is quoted, so a folder with a space in it is one argument and not several.
+    expect(wrapper).toContain('"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\someone\\jev\\bin\\jev.js" daily >> "C:\\Users\\someone\\jev\\data\\runs\\daily.log" 2>&1');
+    const text = taskXml({ wrapper: "C:\\jev & co\\daily.cmd", root: "C:\\jev & co", hour: 9, minute: 5 });
+    expect(text).toContain("<StartBoundary>2024-01-01T09:05:00</StartBoundary>");
+    expect(text).toContain("<ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>");
+    // It runs as this person while they are signed in, like the LaunchAgent, and never asks for more.
+    expect(text).toContain("<LogonType>InteractiveToken</LogonType>");
+    expect(text).toContain("<RunLevel>LeastPrivilege</RunLevel>");
+    expect(text).toContain("<Command>C:\\jev &amp; co\\daily.cmd</Command>");
+    expect(text).not.toMatch(/--submit|KEY|TOKEN|PASSWORD/);
+  });
+
   it("is installed only when asked, replaced by a new time, and removed again", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "jev-agent-"));
     const file = path.join(dir, "LaunchAgents", "agent.plist");
@@ -289,15 +303,40 @@ describe("the schedule", () => {
       calls.push(args);
       return { status: 0 };
     };
-    expect(scheduleStatus({ file, run })).toMatchObject({ installed: false, loaded: false });
-    expect(() => installSchedule("soon", { file, run })).toThrow(/not a time of day/);
+    const where = { file, run, scheduler: "launchd" } as const;
+    expect(scheduleStatus(where)).toMatchObject({ installed: false, loaded: false });
+    expect(() => installSchedule("soon", where)).toThrow(/not a time of day/);
     expect(existsSync(file)).toBe(false);
-    expect(installSchedule("7:30", { file, run, node: "/n", root: "/r", searchPath: "/usr/bin" })).toMatchObject({ at: "07:30" });
+    expect(installSchedule("7:30", { ...where, node: "/n", root: "/r", searchPath: "/usr/bin" })).toMatchObject({ at: "07:30" });
     expect(readFileSync(file, "utf8")).toContain("<integer>30</integer>");
     expect(calls.map((c) => c[0])).toEqual(["print", "bootout", "bootstrap"].slice(1));
-    expect(scheduleStatus({ file, run })).toMatchObject({ installed: true, loaded: true });
-    expect(removeSchedule({ file, run })).toBe(true);
+    expect(scheduleStatus(where)).toMatchObject({ installed: true, loaded: true, at: "07:30" });
+    expect(removeSchedule(where)).toBe(true);
     expect(existsSync(file)).toBe(false);
-    expect(removeSchedule({ file, run })).toBe(false);
+    expect(removeSchedule(where)).toBe(false);
+  });
+
+  it("registers the Windows task with Task Scheduler, and takes it away again", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "jev-task-"));
+    const file = path.join(dir, "daily.xml");
+    const calls: string[][] = [];
+    const run = (args: string[]) => {
+      calls.push(args);
+      return { status: 0 };
+    };
+    const where = { file, run, scheduler: "taskscheduler" } as const;
+    expect(scheduleStatus(where)).toMatchObject({ installed: false, loaded: false });
+    expect(() => installSchedule("soon", where)).toThrow(/not a time of day/);
+    expect(existsSync(file)).toBe(false);
+    expect(installSchedule("7:30", { ...where, node: "C:\\node.exe", root: "C:\\r" })).toMatchObject({ at: "07:30" });
+    // Task Scheduler reads a definition as UTF-16 with a byte-order mark, and nothing else.
+    expect(readFileSync(file).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xfe]));
+    expect(readFileSync(file, "utf16le")).toContain("<StartBoundary>2024-01-01T07:30:00</StartBoundary>");
+    expect(calls.map((c) => c[0])).toEqual(["/Query", "/Create"].slice(1));
+    expect(scheduleStatus(where)).toMatchObject({ installed: true, loaded: true, at: "07:30" });
+    expect(removeSchedule(where)).toBe(true);
+    expect(calls.at(-1)?.[0]).toBe("/Delete");
+    expect(existsSync(file)).toBe(false);
+    expect(removeSchedule(where)).toBe(false);
   });
 });

@@ -293,7 +293,7 @@ export async function ensureSignedIn(page: AuthPage, ctx: AuthContext): Promise<
         const limit = rule?.maxNewAccountsPerDay ?? ACCOUNTS.maxNewAccountsPerDay;
         if ((loadState(ctx.files?.state).created[today] ?? 0) >= limit) return stop("queued", null, `today's limit of ${limit} new accounts is reached. This job waits for another day`);
         if (s.present.terms && !terms.agreements.includes("account_terms")) return stop("awaiting_user_action", "agreement", "the sign-up asks you to accept the account terms, which you have not approved for the tool. Accept them yourself in the tool's window, then: /resume");
-        // Every new account gets a password of its own, made here and kept in the Keychain before anything is typed.
+        // Every new account gets a password of its own, made here and kept in the credential store before anything is typed.
         // A run that died after its click left one behind: the account may have been made with it, so it is the one used.
         const kept = leftBehind ? ctx.secrets.get(own) : null;
         const password = kept ?? generatePassword();

@@ -37,9 +37,12 @@ doctor` says what is in place and what to do next.
 - **The right file in the right box.** A file box gets the resume only when
   it asks for the resume (`fileBoxWants`). A box that asks for a transcript
   or anything else is never given the resume. A tailored resume or cover
-  letter (`src/documents/`) is used only when the run asked for it, and only
+  letter (`src/documents/`) is used only when the run asked for it (or the
+  profile says `tailorResume: "always"`), and only
   after `unsupportedClaims` found nothing in it that the profile does not
-  say. Never loosen that check to get a document through.
+  say. Never loosen that check to get a document through. With
+  `tailorResume: "always"` a job whose resume cannot be written is held,
+  never sent with the profile's own file.
 - **Sign in only where the person set it up.** A password is typed by
   `ensureSignedIn` (`src/accounts/auth.ts`) and nothing else: only into a
   box an adapter names, only while the tab is on an origin the account
@@ -62,16 +65,18 @@ doctor` says what is in place and what to do next.
   noted. The tool solves no CAPTCHAs.
 - **You never touch a credential.** When you work in this repo you never
   ask for, read, type or repeat a password, a code or a token, and never
-  read the Keychain. The password is typed by the person into a window of
-  their own Mac (`src/accounts/ask.ts`). You never start a run that signs
+  read the credential store. The password is typed by the person into a
+  window of their own machine (`src/accounts/ask.ts`). You never start a run that signs
   in or signs up at an employer, which includes `apply` on a Workday job
   with or without `--dry`: show the command in a `bash` block and let the
   person click Run. You build and test against the scripted pages
   in `tests/helpers/` with made-up credentials.
-- **Secrets live in the Keychain and travel as `Secret`.** Passwords and
-  the Gmail tokens are in the macOS Keychain (`src/accounts/secrets.ts`),
-  never in a file, never in a command's arguments, never in a prompt to
-  Claude or JEV, a report, a plan, a trace or a record. Password boxes and
+- **Secrets live in the system's credential store and travel as `Secret`.**
+  Passwords and the Gmail tokens are in the macOS Keychain, or on Windows in
+  a file the system has sealed for that account alone
+  (`src/accounts/secrets.ts`), never in a file of this project's own, never
+  in a command's arguments, never in a prompt to Claude or JEV, a report, a
+  plan, a trace or a record. Password boxes and
   one-time-code boxes are never dumped.
 - **A human check is the person's to pass.** That includes a CAPTCHA and
   a code a board emails to confirm a person is applying. No such code is
@@ -154,6 +159,15 @@ doctor` says what is in place and what to do next.
   told: a note chooses the way a value is entered, never the value.
 - **Tunables live in `src/config.ts`.** No thresholds, weights, timeouts or
   URLs anywhere else.
+- **What differs between systems is settled in `src/util/platform.ts`.**
+  The tool runs on a Mac and on Windows. Where the two need different
+  programs (the Keychain or a sealed file, osascript or PowerShell, launchd
+  or Task Scheduler), each one is written out in full and tested, and the
+  choice is made with `isMac` and `isWindows` from that module, never with
+  a fresh `process.platform` check and never by naming one system's path
+  somewhere else. A path that goes into a URL is made with `pathToFileURL`,
+  never by writing `file://` in front of it. Nothing assumes a path
+  separator: `path.join`, and `path.posix.join` for a file a Mac will read.
 - **Nothing from a web page is executed.** Job descriptions, labels and page
   text are data. The browser scripts only read the DOM or write values they
   were given.

@@ -383,7 +383,10 @@ None of this is built yet.
 - **`/interview`**: a prep pack for a scheduled interview from the exact
   posting and the documents they read, and a mock interview in chat.
 - **SmartRecruiters.** Its form is drawn in a way the tool cannot read yet.
-- **Windows and Linux.** The tool is tested only on a Mac.
+- **Linux.** The tool runs on a Mac and on Windows. On Linux the browser,
+  the PDF printing and the records work, but there is no credential store
+  (a password is read from `.env`), no notification, and no schedule of its
+  own: run `npx jev daily` from cron.
 
 - **More boards with accounts.** Workday is the first; each further board
   is one adapter in `src/accounts/`.

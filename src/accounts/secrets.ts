@@ -1,11 +1,17 @@
 /**
  * Where passwords and tokens live. On a Mac that is the Keychain, through the system's own
- * `security` command. A value is handed out only as a Secret, which cannot be printed or saved by
- * accident, and it never travels in a command's arguments, where another process could read it.
+ * `security` command. On Windows it is a file the system has sealed for this account alone (the
+ * Data Protection API, what Windows keeps its own saved passwords with): another account on the
+ * machine, and the file copied anywhere else, cannot open it. A value is handed out only as a
+ * Secret, which cannot be printed or saved by accident, and it never travels in a command's
+ * arguments, where another process could read it.
  */
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomInt } from "node:crypto";
+import { mkdirSync, rmSync } from "node:fs";
+import path from "node:path";
 import { ACCOUNTS, childEnv } from "../config.js";
+import { isMac, isWindows, powershell, PS_STDIN, PS_STDOUT } from "../util/platform.js";
 import { Secret } from "../util/redact.js";
 
 export interface SecretStore {
@@ -52,17 +58,107 @@ export class KeychainStore implements SecretStore {
   }
 }
 
-/** The environment variable that stands in for a Keychain item on a machine without one: "accounts-password" is JEV_ACCOUNTS_PASSWORD. */
+/** Where Windows keeps this tool's sealed files: under this account's own application data. */
+export const windowsSecretsDir = (env: NodeJS.ProcessEnv = process.env): string =>
+  path.join(env.LOCALAPPDATA ?? path.join(env.USERPROFILE ?? ".", "AppData", "Local"), ACCOUNTS.keychainService, "secrets");
+
+/** An item's own file. The name is written as hex, so any name is a plain file name and two names never collide. */
+const fileFor = (dir: string, name: string): string => path.join(dir, `${Buffer.from(name, "utf8").toString("hex")}.dpapi`);
+
+/** What a PowerShell script is run with: its text, what it reads, and whether the person types into it. */
+export type PsRunner = (script: string, opts: { input?: string; inherit?: boolean; env?: Record<string, string> }) => Pick<SpawnSyncReturns<string>, "status" | "stdout">;
+
+const runPowershell: PsRunner = (script, opts) => {
+  const { command, args } = powershell(script, opts.inherit ? { interactive: true } : {});
+  return spawnSync(command, args, { encoding: "utf8", env: childEnv(opts.env ?? {}), stdio: opts.inherit ? "inherit" : ["pipe", "pipe", "pipe"], ...(opts.input !== undefined ? { input: opts.input } : {}) });
+};
+
+/** Reads the file back. Only this account on this machine can, and the system's own call is the way in. */
+const GET = `$ErrorActionPreference = 'Stop'
+if (-not (Test-Path -LiteralPath $env:JEV_SECRET_FILE)) { exit 1 }
+$sealed = [System.IO.File]::ReadAllText($env:JEV_SECRET_FILE)
+$secure = ConvertTo-SecureString -String $sealed
+$ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+try {
+  $out = ${PS_STDOUT}
+  $out.Write([System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr))
+  $out.Flush()
+} finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }`;
+
+/** Seals a value the tool made itself. It arrives on standard input, never as an argument. */
+const SET = `$ErrorActionPreference = 'Stop'
+$reader = ${PS_STDIN}
+$plain = $reader.ReadToEnd()
+if ($plain.Length -eq 0) { exit 1 }
+$secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
+[System.IO.File]::WriteAllText($env:JEV_SECRET_FILE, (ConvertFrom-SecureString -SecureString $secure))`;
+
+/** The person types it, twice, into Windows's own hidden prompt. This process never sees it. */
+const SET_BY_PERSON = `$ErrorActionPreference = 'Stop'
+$first = Read-Host -AsSecureString -Prompt 'Password'
+$again = Read-Host -AsSecureString -Prompt 'Password again'
+$a = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($first)
+$b = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($again)
+try {
+  if ([System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($a) -cne [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($b)) {
+    Write-Host 'The two did not match. Nothing was stored.'
+    exit 1
+  }
+} finally {
+  [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($a)
+  [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)
+}
+[System.IO.File]::WriteAllText($env:JEV_SECRET_FILE, (ConvertFrom-SecureString -SecureString $first))`;
+
+/**
+ * Windows. Each value is a file the system has sealed for this account, and an environment
+ * variable a person put in .env is still read when there is no file, so a setup that started
+ * that way keeps working. `run` is PowerShell, replaceable in a test.
+ */
+export class WindowsStore implements SecretStore {
+  constructor(
+    private readonly run: PsRunner = runPowershell,
+    private readonly dir: string = windowsSecretsDir(),
+  ) {}
+
+  get(name: string): Secret | null {
+    const r = this.run(GET, { env: { JEV_SECRET_FILE: fileFor(this.dir, name) } });
+    const value = r.stdout ?? "";
+    if (r.status === 0 && value) return new Secret(value);
+    const fromEnv = process.env[envNameOf(name)];
+    return fromEnv ? new Secret(fromEnv) : null;
+  }
+
+  set(name: string, value: Secret): void {
+    // A value is handed back exactly as it was given. Anything the sealing cannot carry is refused.
+    if (/[\x00-\x1f\x7f]/.test(value.reveal())) throw new Error(`the value for ${name} holds a character the credential store cannot take`);
+    mkdirSync(this.dir, { recursive: true });
+    const r = this.run(SET, { input: value.reveal(), env: { JEV_SECRET_FILE: fileFor(this.dir, name) } });
+    // The command's own exit code says little, so the item is read back.
+    if (r.status !== 0 || this.get(name)?.reveal() !== value.reveal()) throw new Error(`Windows did not take ${name}`);
+  }
+
+  setByPerson(name: string): boolean {
+    mkdirSync(this.dir, { recursive: true });
+    return this.run(SET_BY_PERSON, { inherit: true, env: { JEV_SECRET_FILE: fileFor(this.dir, name) } }).status === 0;
+  }
+
+  delete(name: string): void {
+    rmSync(fileFor(this.dir, name), { force: true });
+  }
+}
+
+/** The environment variable that stands in for a stored item on a machine without a credential store: "accounts-password" is JEV_ACCOUNTS_PASSWORD. */
 export const envNameOf = (item: string) => `JEV_${item.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
 
-/** Environment variables, for a machine with no Keychain. The values are read here and nowhere else. */
+/** Environment variables, for a machine with no credential store. The values are read here and nowhere else. */
 export class EnvStore implements SecretStore {
   get(name: string): Secret | null {
     const v = process.env[envNameOf(name)];
     return v ? new Secret(v) : null;
   }
   set(): void {
-    throw new Error("this machine has no Keychain: put the value in .env yourself");
+    throw new Error("this machine has no credential store: put the value in .env yourself");
   }
   setByPerson(): boolean {
     return false;
@@ -90,7 +186,7 @@ export class MemoryStore implements SecretStore {
   }
 }
 
-/** The Keychain item that holds one employer account's own password. */
+/** The stored item that holds one employer account's own password. */
 export const itemFor = (accountId: string) => `account:${accountId}`;
 
 /**
@@ -110,14 +206,14 @@ export function generatePassword(): Secret {
   return new Secret(chars.join(""));
 }
 
-export const defaultStore = (): SecretStore => (process.platform === "darwin" ? new KeychainStore() : new EnvStore());
+export const defaultStore = (): SecretStore => (isMac ? new KeychainStore() : isWindows ? new WindowsStore() : new EnvStore());
 
 /** Which of a board's password rules a password does not meet. Says which rules, never the password. */
 export function passwordProblems(password: Secret): string[] {
   const p = password.reveal();
   const r = ACCOUNTS.mustHave;
   const out: string[] = [];
-  // The Keychain hands back anything else in another form, which would then be typed as the password.
+  // A credential store hands back anything else in another form, which would then be typed as the password.
   if (/[^\x21-\x7e]/.test(p)) out.push("only letters, digits and symbols from a plain keyboard, with no spaces");
   if (p.length < r.minLength) out.push(`at least ${r.minLength} characters`);
   if (r.digit && !/\d/.test(p)) out.push("a digit");
