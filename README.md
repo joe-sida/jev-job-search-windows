@@ -201,7 +201,9 @@ Beyond the suite, this build has been driven end to end on Windows 11: Chrome la
 
 ## Beyond the port
 
-Two changes in this build are not about Windows. They are noted here so nobody mistakes them for upstream behaviour:
+Three changes in this build are not about Windows. They are noted here so nobody mistakes them for upstream behaviour:
+
+- **A list's shortened links are followed before anything is decided.** One public list gives every posting a `go.vansh.nyc` link, which hides the board. Arriving as `other`, each one escaped the rules that skip a board wanting an account, was rated at JEV's expense, and then cost a run up to three minutes on a page that could never produce a form. Discovery now follows the link once and reads the board from where it lands. On a sample of twelve: five became boards the tool applies to, with the form's own URL worked out, and seven were skipped for free. The posting keeps its own link as its identity, so nothing already recorded against a job moves.
 
 - **The job scope is wider.** Upstream keeps software engineering titles. This build also keeps data, machine learning, AI, analytics and IT systems support titles, in the title filter and in the question JEV is asked about a posting. The saved key for that question is unchanged, so existing ratings and reports still read.
 - **A resume written for every job can be made mandatory.** Setting `"tailorResume": "always"` under `preferences` in your profile writes a resume per job, and is strict about it: a job whose resume could not be written is held with the reason instead of being sent with your master resume.
