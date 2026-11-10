@@ -76,12 +76,14 @@ describe.skipIf(!existsSync(BROWSER.chromePath))("the dashboard page in a real b
     });
     profile = mkdtempSync(path.join(tmpdir(), "jev-chrome-"));
     chrome = spawn(BROWSER.chromePath, ["--headless=new", `--remote-debugging-port=${port}`, "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "about:blank"], { stdio: "ignore", env: childEnv() });
-    for (let i = 0; i < 80; i++) {
+    // A minute, because a cold machine with two of these suites starting at once, a shared
+    // runner among them, can take far longer over the first launch than a warm one does.
+    for (let i = 0; i < 240; i++) {
       if (await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false)) return;
       await sleep(250);
     }
-    throw new Error("headless Chrome did not start");
-  }, 30_000);
+    throw new Error("headless Chrome did not answer on its debugging port within a minute");
+  }, 90_000);
 
   afterAll(async () => {
     await stopChrome(chrome, profile);
