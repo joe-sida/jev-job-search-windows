@@ -1,8 +1,16 @@
 {
-  "name": "jev-job-search",
+  "name": "jev-job-search-windows",
   "version": "1.6.0",
   "private": true,
-  "description": "Finds software internships and new-grad roles, rates them with JEV, fills and verifies each application in seconds, and submits it.",
+  "description": "The Windows build of jev-job-search: finds software, data and IT roles, rates them with JEV, fills and verifies each application in Chrome, and submits it.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joe-sida/jev-job-search-windows.git"
+  },
+  "homepage": "https://github.com/joe-sida/jev-job-search-windows#readme",
+  "bugs": {
+    "url": "https://github.com/joe-sida/jev-job-search-windows/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"

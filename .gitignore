@@ -35,3 +35,6 @@ npm-debug.log*
 
 # test output
 coverage/
+
+# the audit report CI writes before the gate reads it
+audit.json
