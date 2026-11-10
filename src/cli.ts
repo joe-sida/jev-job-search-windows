@@ -15,7 +15,8 @@ import { loadReport, type Fill, type FillReport } from "./browser/report.js";
 import { closeJobTab, loadSession, pageFor } from "./browser/session.js";
 import { clearBrowsingData, closeTab, ensureBrowser, listTargets, newTab, Page, sleep } from "./browser/cdp.js";
 import { acquireRun, currentRun } from "./util/store.js";
-import { waitingWords } from "./run/assist.js";
+import { notify, waitingWords } from "./run/assist.js";
+import { writeMemo } from "./run/memo.js";
 import { withStore } from "./util/store.js";
 import { checkJob } from "./browser/submit.js";
 import { ACCOUNTS, childEnv, DAILY, GMAIL, INBOX, loadEnv, DISCOVER, PATHS, REPORT, RUN } from "./config.js";
@@ -90,6 +91,16 @@ program
     console.log(`${summary.queued} queued (score ≥ ${DISCOVER.applyThreshold}), ${summary.belowThreshold} below threshold, ${summary.skippedByJev} skipped by JEV.`);
     console.log(`JEV: ${summary.jevCalls} calls, $${summary.jevCostUsd.toFixed(4)}.\n`);
     printTable(top);
+  });
+
+program
+  .command("memo")
+  .description("Write the to-do list of everything the tool could not finish, and show where it is")
+  .option("--open", "open it in whatever this system opens Markdown with")
+  .action((o: { open?: boolean }) => {
+    const file = writeMemo({ always: true });
+    console.log(file);
+    if (o.open && file) openWithSystem(file);
   });
 
 program
@@ -192,6 +203,12 @@ program
         const waiting = count("awaiting_user_action", "awaiting_email_verification");
         if (waiting) console.log(`${waiting} form(s) are open and waiting for you (an emailed code, a robot check, a sign-in). Finish each in the tool's window, then run: npx jev resume`);
         if (count("submission_unknown")) console.log(`${count("submission_unknown")} form(s) were clicked and not confirmed. They will not be sent again until settled: npx jev reconcile`);
+        const memo = writeMemo();
+        if (memo) {
+          console.log(`
+What is left for you, as a list you can come back to: ${memo}`);
+          notify("jev-job-search left you a to-do", `${waiting + count("needs_review", "submission_unknown")} thing(s) to finish. The list is in ${path.basename(memo)}.`);
+        }
         console.log(whereTheRecordIs());
       }
     });
