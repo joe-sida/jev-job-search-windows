@@ -62,7 +62,7 @@ export function agentPlist(o: { node: string; root: string; hour: number; minute
  * file, so this one line does, the way the LaunchAgent's StandardOutPath does on a Mac.
  */
 export function taskWrapper(o: { node: string; root: string; log: string }): string {
-  return ["@echo off", `"${o.node}" "${path.join(o.root, "bin", "jev.js")}" daily >> "${o.log}" 2>&1`, ""].join("\r\n");
+  return ["@echo off", `"${o.node}" "${path.win32.join(o.root, "bin", "jev.js")}" daily >> "${o.log}" 2>&1`, ""].join("\r\n");
 }
 
 /**
