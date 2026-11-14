@@ -120,6 +120,14 @@ doctor` says what is in place and what to do next.
 - **Nothing about one candidate in source.** Years, cities, drafts and
   phrasing come from the profile, `data/bank.json` and
   `data/voice.local.md`.
+- **What the search covers is the profile's, not the code's.** The kind of
+  work (`preferences.roleWords`, `roleDescription`), the level
+  (`preferences.levels`) and the places (`preferences.areas`) are read in
+  `src/jobs/wanted.ts` and `src/jobs/areas.ts`, and each one narrows
+  nothing when it is absent: the tool is for a job search of any kind, not
+  for one trade. Never write a trade, a job title, a city or a level into
+  `src/`, and never ask JEV a question that names one unless the words came
+  from the profile.
 - **A remembered answer never outranks the profile.** The answer memory
   (`src/answers/memory.ts`) reuses an answer only under the same fingerprint
   of the candidate's context, only for the same form or for an answer the

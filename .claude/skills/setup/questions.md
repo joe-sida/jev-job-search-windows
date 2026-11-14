@@ -42,12 +42,18 @@ their status, they should check before applying.
 
 ## D. What you are looking for
 
+Ask these before anything else in this section, because they decide what
+the search covers. Each one narrows nothing if the person has no answer, so
+"anything" is a real answer and is written as an empty list or left out.
+
 | Ask | Goes in |
 |---|---|
-| Internships, new-grad roles, or both, and for which terms | `summary`, and a standing answer |
+| What kind of work are you looking for? Take their own words and turn them into the words a posting's title would use: "software, data, IT support" becomes `["software", "developer", "data", "analytics", "IT", "support"]`. Add the surface forms a title really uses, read the list back to them, and say that a posting whose title holds none of these words is set aside before it is rated | `preferences.roleWords`, and the same thing as one sentence in `preferences.roleDescription` |
+| Internships, new-grad roles, experienced roles, or any of them? | `preferences.levels` (`internship`, `new_grad`, `experienced`), `summary`, and a standing answer |
+| Which places will you work in? A state, a city, a metro area in your own words, or Remote | `preferences.areas` |
 | The earliest date you can start | `preferences.earliestStart` |
 | How long you can work: term lengths, or "permanent" | `preferences.availability` |
-| The places you want to work, best first | `preferences.preferredLocations` |
+| The places you want to work, best first (this orders what the places above kept) | `preferences.preferredLocations` |
 | Will you relocate? | `preferences.willingToRelocate` |
 | Remote work: preferred, open to it, or no | `preferences.remote` |
 | Can you work in an office or hybrid if the job needs it? | a standing answer |

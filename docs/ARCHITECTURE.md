@@ -23,9 +23,11 @@ importSheet(data/imports/*.csv) ─┼→ dedupe → preFilter → describe → 
 boards (greenhouse / lever / ashby for every company seen) ─┘                                   └→ applications.csv
 ```
 
-1. **Collect.** Sources run concurrently. Board polling keeps only
-   early-career titles (`EARLY_CAREER_TITLE`) because boards list every
-   role.
+1. **Collect.** Sources run concurrently. Board polling keeps the titles
+   that suit the levels the profile asks for (`wantsLevelByTitle` in
+   `src/jobs/wanted.ts`), because a board lists every role and a listing
+   gives nothing but a title. A profile that asks for experienced roles
+   keeps them all, since an experienced title says nothing about itself.
 2. **Dedupe** by posting (`postingKey` in `src/jobs/normalize.ts`). The
    lists and the boards link one job in several ways: a careers page with
    `gh_jid`, the board page, the embedded form, Ashby's `/application`. The

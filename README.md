@@ -6,13 +6,13 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![upstream: qbeka/jev-job-search](https://img.shields.io/badge/upstream-qbeka%2Fjev--job--search-lightgrey.svg)](https://github.com/qbeka/jev-job-search)
 
-An open-source job application tool built on [Claude Code](https://claude.com/claude-code). It finds software, data and IT roles, fills the application forms in a Chrome window you can watch, reads every answer back from the page, and sends the ones you approve.
+An open-source job application tool built on [Claude Code](https://claude.com/claude-code). It finds jobs of whatever kind you are looking for, fills the application forms in a Chrome window you can watch, reads every answer back from the page, and sends the ones you approve.
 
 This is the Windows build. The original, [qbeka/jev-job-search](https://github.com/qbeka/jev-job-search), was written for macOS: it reached the Keychain through `/usr/bin/security`, drew its password window with `osascript`, opened links with `open`, and scheduled the daily run as a launchd LaunchAgent. None of that exists on Windows. This fork writes each of those parts a second time against what Windows actually provides, keeps the macOS versions working, and decides between them in one module. Same tool, same commands, same records. It just runs on your PC.
 
 | | |
 |---|---|
-| **Who it is for** | Students and new graduates applying to software, data, machine learning, analytics or IT support roles in Canada, the United States or remotely, who are comfortable opening a terminal once. It writes in English. |
+| **Who it is for** | Anyone applying to jobs that have an online application form, who is comfortable opening a terminal once. The kind of work, the level and the places are yours to name in your profile, and nothing about any trade is in the code. It writes in English, and the public job lists it ships with are strongest for early-career software, data and IT roles. |
 | **What you need** | Windows 10 or 11, Google Chrome, [Node.js](https://nodejs.org) 22 or newer, and [Claude Code](https://claude.com/claude-code) signed in with a Claude Pro or Max subscription. No WSL. |
 | **What it costs** | Your Claude subscription, plus a few dollars of [OpenRouter](https://openrouter.ai/keys) credit for JEV: about 1 to 1.5 cents per 10 applications. Nothing else. |
 | **How to start** | Clone it, run `npm install`, open `claude` in the folder and type `/setup`. About 20 minutes, most of it your answers. |
@@ -28,6 +28,7 @@ This is the Windows build. The original, [qbeka/jev-job-search](https://github.c
 - [Install](#install)
 - [Set up your profile](#set-up-your-profile)
 - [Everyday use](#everyday-use)
+- [Telling it what you are looking for](#telling-it-what-you-are-looking-for)
 - [Where Windows keeps your things](#where-windows-keeps-your-things)
 - [Settings you may need](#settings-you-may-need)
 - [Proving it works](#proving-it-works)
@@ -131,6 +132,28 @@ Type these in Claude Code. Each one also exists as `npx jev <command>` if you wo
 | `/profile` | Changes your profile, your standing answers, your drafts and your voice guide |
 
 The full command reference is [docs/USAGE.md](docs/USAGE.md). How a form is actually filled and verified is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Telling it what you are looking for
+
+Nothing about a trade, a level or a city is in the code. Four fields under `preferences` in your profile decide what the search covers, and `/profile` changes any of them with you. **Leave one out and it narrows nothing**, which is how the tool behaves before you have said anything: every kind of job, at every level, everywhere.
+
+| Field | What it does |
+|---|---|
+| `roleWords` | Words a posting's title must hold for the job to be in scope: `["software", "data", "IT support"]`, or `["nurse", "nursing", "clinical"]`, or `["electrician", "HVAC"]`. A word matches where a reader would say it does, so `data` matches "Data Analyst" and not "Validation". A posting whose title holds none of them is set aside before it is rated, and costs nothing |
+| `roleDescription` | The same thing in a sentence, for the one question JEV is asked about each posting: "bedside nursing in a hospital or clinic". Left out, `roleWords` is read out instead |
+| `levels` | Which of `internship`, `new_grad` and `experienced` you want. A search that does not ask for experienced roles drops a company board's postings whose titles do not say early career, because a board listing gives nothing but a title |
+| `areas` | The places you will work: a state by name or code, a city, a metro area in your own words, or `Remote` |
+
+So a nursing search is:
+
+```json
+"roleWords": ["nurse", "nursing", "clinical", "RN"],
+"roleDescription": "bedside nursing in a hospital or clinic",
+"levels": ["new_grad", "experienced"],
+"areas": ["Maryland", "Virginia", "DC"]
+```
+
+Two things are worth knowing before you point it somewhere far from software. The job lists it ships with (`DISCOVER.sources` in `src/config.ts`) are early-career software, data and IT lists, so a nursing search will find little in them until you add a source for your field with `/add-source`. And the boards it fills well are the ones that put an application behind a single public form: Greenhouse, Lever, Ashby, Rippling, BambooHR, Jobvite. A field that hires mostly through portals wanting an account will leave more for you to do by hand, and the tool will say so rather than guess.
 
 ## Where Windows keeps your things
 

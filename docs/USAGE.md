@@ -113,7 +113,12 @@ Before it spends anything, the tool removes jobs that:
 - need an account to apply, unless it is a Workday job and you allowed
   accounts (see [ACCOUNTS.md](ACCOUNTS.md))
 - were posted more than 14 days ago
-- are not software jobs, by their title
+- are not the kind of work you asked for, by their title (`preferences.roleWords`
+  in your profile; name none and every kind is in scope)
+- are at a level you did not ask for (`preferences.levels`; name none and
+  every level is in scope)
+- are not in the places you work in (`preferences.areas`; name none and
+  everywhere is in scope)
 - have a French title (the tool writes in English only)
 - require a master's degree or a doctorate
 - are unpaid
