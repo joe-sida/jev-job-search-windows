@@ -43,17 +43,30 @@ describe("preFilter", () => {
     expect(preFilter(job({ postedAt: "2026-09-01" }), now)).toMatch(/days ago/);
     expect(preFilter(job({ postedAt: null }), now)).toBeNull();
   });
-  it("rejects non-software titles unless they also say software", () => {
-    expect(preFilter(job({ title: "Hardware Engineer Intern" }), now)).toMatch(/not a software role/);
-    expect(preFilter(job({ title: "Product Manager Intern" }), now)).toMatch(/not a software role/);
-    expect(preFilter(job({ title: "Software Engineer Intern, Hardware Tools" }), now)).toBeNull();
-  });
-  it("keeps data, ML/AI, analytics and IT support titles", () => {
-    for (const title of ["Data Analyst, New Grad", "Data Scientist I", "Machine Learning Engineer", "AI Engineer, Early Career", "IT Support Technician", "Help Desk Analyst", "Systems Support Specialist"]) {
+  it("keeps every kind of work until the profile says what it wants", () => {
+    // The tool is for a job search, not for one trade: with nothing asked for, nothing is dropped.
+    for (const title of ["Hardware Engineer Intern", "Registered Nurse", "Marketing Coordinator", "Warehouse Associate", "Staff Accountant"]) {
       expect(preFilter(job({ title }), now), title).toBeNull();
     }
-    expect(preFilter(job({ title: "Process Technician" }), now)).toMatch(/not a software role/);
-    expect(preFilter(job({ title: "Marketing Analyst" }), now)).toMatch(/not a software role/);
+  });
+  it("keeps only the kinds of work the profile names", () => {
+    const wants = { roleWords: ["software", "data", "IT support"] };
+    const skip = (title: string) => preFilter(job({ title }), now, () => false, { authorized: false, citizen: false }, 60, () => false, wants);
+    for (const title of ["Software Engineer Intern", "Data Analyst, New Grad", "IT Support Technician", "Senior Data Scientist"]) {
+      expect(skip(title), title).toBeNull();
+    }
+    for (const title of ["Hardware Engineer Intern", "Registered Nurse", "Marketing Coordinator"]) {
+      expect(skip(title), title).toMatch(/not the kind of work you asked for/);
+    }
+    // A word is matched where a reader would say it is, not inside another word.
+    expect(skip("Validation Engineer")).toMatch(/not the kind of work/);
+  });
+  it("keeps a nurse's search to nursing, the same way", () => {
+    const wants = { roleWords: ["nurse", "nursing", "clinical"] };
+    const skip = (title: string) => preFilter(job({ title }), now, () => false, { authorized: false, citizen: false }, 60, () => false, wants);
+    expect(skip("Registered Nurse, Night Shift")).toBeNull();
+    expect(skip("Clinical Research Coordinator")).toBeNull();
+    expect(skip("Software Engineer Intern")).toMatch(/not the kind of work you asked for/);
   });
   it("rejects US roles with no sponsorship or citizenship flags, but not Canadian ones", () => {
     expect(preFilter(job({ locations: ["Austin, TX"], sponsorship: "none" }), now)).toMatch(/no sponsorship/);
@@ -76,7 +89,7 @@ describe("preFilter", () => {
 
 function answers(over: Record<string, Partial<Answer>> = {}): Record<string, Answer> {
   const base: Record<string, Answer> = {
-    is_software_role: { type: "noul", noul: 0.98 },
+    is_wanted_role: { type: "noul", noul: 0.98 },
     level: { type: "choice", choice: "internship", probabilities: { internship: 1 }, confidence: 1 },
     is_unpaid: { type: "noul", noul: 0.02 },
     needs_advanced_degree: { type: "noul", noul: 0.02 },
@@ -98,7 +111,12 @@ function answers(over: Record<string, Partial<Answer>> = {}): Record<string, Ans
 
 describe("scoreFromAnswers", () => {
   it("asks every question the scorer reads", () => {
-    for (const k of Object.keys(answers())) expect(FIT_QUESTIONS).toHaveProperty(k);
+    const asked = fitQuestions({ education: [], preferences: { roleWords: ["software"] } as never });
+    for (const k of Object.keys(answers())) expect(asked).toHaveProperty(k);
+    // The kind-of-work question is the profile's, so it is not among the fixed ones.
+    expect(FIT_QUESTIONS).not.toHaveProperty("is_wanted_role");
+    expect(JSON.stringify(fitQuestions({ education: [], preferences: { roleWords: ["nursing"] } as never }).is_wanted_role)).toContain("nursing");
+    expect(fitQuestions({ education: [] })).not.toHaveProperty("is_wanted_role");
   });
   it("queues a strong, fresh US internship", () => {
     const fit = scoreFromAnswers(job({ locations: ["Austin, TX"] }), answers({ work_auth: { choice: "us_sponsors" } }), now);
@@ -117,8 +135,16 @@ describe("scoreFromAnswers", () => {
     expect(scoreFromAnswers(job({ locations: ["Vancouver, BC"] }), answers(), now).decision).toBe("below_threshold");
   });
   it("skips on the hard rules regardless of score", () => {
-    expect(scoreFromAnswers(job(), answers({ is_software_role: { noul: 0.2 } }), now).skipReason).toBe("not a software role");
-    expect(scoreFromAnswers(job(), answers({ level: { choice: "experienced", confidence: 0.9 } }), now).skipReason).toMatch(/experience/);
+    expect(scoreFromAnswers(job(), answers({ is_wanted_role: { noul: 0.2 } }), now).skipReason).toBe("not the kind of work you asked for");
+    // A rating saved when the question had its old name is still honoured.
+    const old: Record<string, Answer> = { ...answers(), is_software_role: { type: "noul", noul: 0.2 } as Answer };
+    delete old["is_wanted_role"];
+    expect(scoreFromAnswers(job(), old, now).skipReason).toBe("not the kind of work you asked for");
+    // An experienced posting is set aside only for a search that did not ask for experienced roles.
+    const experienced = answers({ level: { choice: "experienced", confidence: 0.9 } });
+    expect(scoreFromAnswers(job(), experienced, now, undefined, { levels: ["internship", "new_grad"] }).skipReason).toMatch(/experience/);
+    expect(scoreFromAnswers(job(), experienced, now).skipReason).toBeNull();
+    expect(scoreFromAnswers(job(), experienced, now, undefined, { levels: ["experienced"] }).skipReason).toBeNull();
     expect(scoreFromAnswers(job(), answers({ is_unpaid: { noul: 0.9 } }), now).skipReason).toBe("unpaid");
     expect(scoreFromAnswers(job(), answers({ needs_advanced_degree: { noul: 0.9 } }), now).skipReason).toMatch(/degree/);
     expect(scoreFromAnswers(job({ locations: ["SF"] }), answers({ work_auth: { choice: "us_no_sponsorship", confidence: 0.8 } }), now).skipReason).toMatch(/no sponsorship/);
@@ -151,7 +177,7 @@ describe("graduation window and account walls", () => {
     expect(scoreFromAnswers(job(), old, now).score).toBe(scoreFromAnswers(job(), answers(), now).score);
   });
   it("words the term and graduation questions from the profile's own graduation date", () => {
-    const q = fitQuestions({ education: [{ school: "U", degree: "BSc", field: "CS", startMonth: 9, startYear: 2025, gradMonth: 12, gradYear: 2028, status: "in_progress" }] });
+    const q = fitQuestions({ education: [{ school: "U", degree: "BSc", field: "CS", startMonth: 9, startYear: 2025, gradMonth: 12, gradYear: 2028, status: "in_progress" }], preferences: { roleWords: ["software"] } as never });
     expect(JSON.stringify(q.term)).toContain("Summer 2028");
     expect(JSON.stringify(q.graduation_excluded)).toContain("December 2028");
     for (const k of Object.keys(answers())) expect(q).toHaveProperty(k);

@@ -74,16 +74,16 @@ describe("the filter that uses it", () => {
   const us = { authorized: true, citizen: false };
 
   it("skips a posting outside those places, and says so", () => {
-    expect(preFilter(job(), now, () => false, us, 60, () => false, dmv)).toBe(null);
-    expect(preFilter(job({ locations: ["Austin, TX"] }), now, () => false, us, 60, () => false, dmv)).toBe("not in the places you work in");
+    expect(preFilter(job(), now, () => false, us, 60, () => false, { areas: dmv })).toBe(null);
+    expect(preFilter(job({ locations: ["Austin, TX"] }), now, () => false, us, 60, () => false, { areas: dmv })).toBe("not in the places you work in");
     // With no places named, the same posting passes: this narrows only for someone who asked.
     expect(preFilter(job({ locations: ["Austin, TX"] }), now, () => false, us, 60, () => false)).toBe(null);
   });
 
   it("still skips for the older reasons first, so the reason a person reads is the real one", () => {
     const old = job({ locations: ["Austin, TX"], postedAt: "2026-01-01" });
-    expect(preFilter(old, now, () => false, us, 60, () => false, dmv)).toBe("not in the places you work in");
+    expect(preFilter(old, now, () => false, us, 60, () => false, { areas: dmv })).toBe("not in the places you work in");
     const walled = job({ locations: ["Austin, TX"], ats: "icims" });
-    expect(preFilter(walled, now, () => false, us, 60, () => false, dmv)).toBe("icims (needs an account)");
+    expect(preFilter(walled, now, () => false, us, 60, () => false, { areas: dmv })).toBe("icims (needs an account)");
   });
 });

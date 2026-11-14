@@ -131,6 +131,25 @@ export const ProfileSchema = z.object({
     areas: z.array(z.string()).optional(),
     /** What to search a site like Indeed for, in the person's own words. Left out, the general terms in DISCOVER are used. */
     searchTerms: z.array(z.string()).optional(),
+    /**
+     * Words that say what kind of work this is a search for: "software", "data", "nursing",
+     * "marketing", "warehouse". A posting whose title holds none of them is set aside before it
+     * is rated, and JEV is asked about the same words. Left out, or empty, every kind of job is
+     * in scope, which is what the tool does for anyone who has not said otherwise.
+     */
+    roleWords: z.array(z.string()).optional(),
+    /**
+     * The same thing in a sentence, for the question JEV is asked about a posting: "software,
+     * data or IT systems support", "nursing", "warehouse and logistics". Left out, the words in
+     * `roleWords` are read out instead, which is fine when they read as a list of trades.
+     */
+    roleDescription: z.string().optional(),
+    /**
+     * The levels this search is for: "internship", "new_grad", "experienced". Left out, or empty,
+     * all three are. A search that does not ask for experienced roles drops a board's postings
+     * whose titles do not say early career, because a title is all a board listing gives.
+     */
+    levels: z.array(z.enum(["internship", "new_grad", "experienced"])).optional(),
     howDidYouHear: z.string(),
     /** What to do when a form requires references. "skip" logs and moves on. */
     references: z.enum(["skip"]),

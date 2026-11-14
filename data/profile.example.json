@@ -118,6 +118,22 @@
       "Canada",
       "Remote"
     ],
+    "areas": [
+      "British Columbia",
+      "Ontario",
+      "Remote"
+    ],
+    "roleWords": [
+      "software",
+      "developer",
+      "engineer",
+      "data"
+    ],
+    "roleDescription": "writing software, or working with data",
+    "levels": [
+      "internship",
+      "new_grad"
+    ],
     "howDidYouHear": "LinkedIn",
     "references": "skip",
     "coverLetter": "never"

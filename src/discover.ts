@@ -17,6 +17,13 @@ import { fetchIndeed, indeedSearches } from "./sources/indeed.js";
 import { entryFor, KEPT_ON_REDISCOVERY, loadQueue, mutateQueue, sortEntries, type QueueEntry, type QueueFile, type QueueStatus } from "./jobs/queue.js";
 import { withStore } from "./util/store.js";
 
+/** What the person asked their search to cover. Everything absent means nothing is narrowed. */
+const wantsOf = (profile: Profile) => ({
+  areas: profile.preferences.areas ?? [],
+  roleWords: profile.preferences.roleWords ?? [],
+  levels: profile.preferences.levels ?? [],
+});
+
 /** Jobs whose earlier rating still stands: a run or a person already settled them. */
 const NOT_RERATED: readonly QueueStatus[] = KEPT_ON_REDISCOVERY.filter((s) => s !== "needs_review" && s !== "in_progress");
 /** Jobs kept in the queue when their posting is gone from every list: sent, unconfirmed, or waiting on the person or a run. */
@@ -35,12 +42,8 @@ import { fetchSimplify } from "./sources/simplify.js";
 import { importSheet } from "./sources/sheetImport.js";
 import { mapLimit, resolveUrl } from "./util/http.js";
 
-export const EARLY_CAREER_TITLE = /\b(intern|internship|co-?op|new grad|new graduate|early career|early-career|entry[- ]level|junior|graduate|university|student|campus|associate software|software engineer i\b|engineer i\b|swe i\b)\b/i;
-
-/** A board posting counts as early-career by its title, or by naming the candidate's graduation year. */
-export function isEarlyCareerTitle(title: string, gradYear?: number): boolean {
-  return EARLY_CAREER_TITLE.test(title) || (gradYear !== undefined && new RegExp(`\\b${gradYear}\\b`).test(title));
-}
+export { EARLY_CAREER_TITLE, wantsLevelByTitle } from "./jobs/wanted.js";
+import { wantsLevelByTitle as wantsLevel } from "./jobs/wanted.js";
 
 export type DiscoverOptions = {
   boards?: boolean;
@@ -49,6 +52,8 @@ export type DiscoverOptions = {
   now?: Date;
   /** The candidate's graduation year: a board title that names it is early-career. */
   gradYear?: number;
+  /** The levels the search is for, from the profile. Empty means every level. */
+  levels?: readonly string[];
   /** Consider postings up to this many days old, for one search. The default is DISCOVER.maxAgeDays. */
   maxAgeDays?: number;
   /** Also read Indeed, in the tool's own Chrome. What to search for comes from the profile. */
@@ -116,9 +121,9 @@ export async function collectJobs(opts: DiscoverOptions = {}): Promise<Job[]> {
     let fromBoards = 0;
     results.forEach((r) => {
       if (!r.ok) return;
-      const early = r.value.filter((j) => isEarlyCareerTitle(j.title, opts.gradYear));
-      fromBoards += early.length;
-      jobs.push(...early);
+      const wanted = r.value.filter((j) => wantsLevel(j.title, opts.levels ?? [], opts.gradYear));
+      fromBoards += wanted.length;
+      jobs.push(...wanted);
     });
     log(`[sources] boards contributed ${fromBoards} early-career postings`);
   }
@@ -230,7 +235,7 @@ export async function discover(profile: Profile, jev: JevClient, opts: DiscoverO
   const prevById = new Map(previous.entries.map((e) => [e.job.id, e]));
 
   const gradYear = profile.education[0]?.gradYear;
-  const all = await collectJobs({ ...opts, ...(gradYear !== undefined ? { gradYear } : {}), ...(opts.indeed ? { indeedSearches: indeedSearches(profile) } : {}) });
+  const all = await collectJobs({ ...opts, ...(gradYear !== undefined ? { gradYear } : {}), levels: profile.preferences.levels ?? [], ...(opts.indeed ? { indeedSearches: indeedSearches(profile) } : {}) });
   const learned = learnedWalledHosts();
   const us = usStatus(profile);
   const collected = all.length;
@@ -243,7 +248,7 @@ export async function discover(profile: Profile, jev: JevClient, opts: DiscoverO
   // An account board counts when the person has an account there or allowed one, even if today's limit of new accounts is used up.
   const withAccount = (url: string) => (capabilityFor(url)?.verdict ?? "no") !== "no";
   for (const job of all) {
-    const reason = preFilter(job, now, (url) => isWalled(url, learned), us, opts.maxAgeDays, withAccount, profile.preferences.areas ?? []);
+    const reason = preFilter(job, now, (url) => isWalled(url, learned), us, opts.maxAgeDays, withAccount, wantsOf(profile));
     if (reason) decided.push({ job, fit: null, reason });
     else kept.push(job);
   }

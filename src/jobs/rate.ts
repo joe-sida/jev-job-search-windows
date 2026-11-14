@@ -9,6 +9,7 @@ import { choice, noul, score, scoreToUnit } from "../jev/questions.js";
 import type { Answer, ChoiceAnswer, NoulAnswer, Questions, ScoreAnswer } from "../jev/types.js";
 import { monthName, usStatus, type Profile } from "../profile/schema.js";
 import { locationTier, type LocationTier } from "./hardFilters.js";
+import { levelFit as levelFitFor, roleQuestion } from "./wanted.js";
 import { ageDays, type Job } from "./normalize.js";
 import { hashOf, type KeyedCache } from "../util/cache.js";
 
@@ -27,12 +28,18 @@ function termCriteria(gradMonth: number, gradYear: number): Record<string, strin
 }
 
 /** Every question for one posting, with the term and graduation wording taken from the profile. */
-export function fitQuestions(profile: Pick<Profile, "education">): Questions {
+export function fitQuestions(profile: Pick<Profile, "education"> & { preferences?: Profile["preferences"] }): Questions {
   const edu = profile.education[0];
   const month = edu?.gradMonth ?? 4;
   const year = edu?.gradYear ?? new Date().getUTCFullYear() + 1;
+  const roleWords = profile.preferences?.roleWords ?? [];
+  const described = profile.preferences?.roleDescription;
+  const role = roleWords.length > 0 || (described ?? "").trim() !== "" ? roleQuestion(roleWords, described) : null;
   return {
     ...FIT_QUESTIONS,
+    // Asked only when the profile names the kind of work. A search with no kind named asks nothing,
+    // and then no posting is ever set aside for being the wrong kind.
+    ...(role ? { is_wanted_role: noul(role.question, { true: role.yes, false: role.no }) } : {}),
     term: choice("Which term or start does this posting target?", termCriteria(month, year)),
     graduation_excluded: noul(`Does the posting require a graduation date or year of study that a candidate graduating in ${monthName(month)} ${year} does not meet?`, {
       true: `It names a graduation window, class year or "returning to school after" rule that excludes ${monthName(month)} ${year}`,
@@ -42,11 +49,6 @@ export function fitQuestions(profile: Pick<Profile, "education">): Questions {
 }
 
 export const FIT_QUESTIONS: Questions = {
-  // The key keeps its old name so saved ratings, the report and the tests keep working. The scope is software, data, analytics, ML/AI and IT systems support.
-  is_software_role: noul("Is this a software, data, analytics, machine learning or AI role, or an IT systems support role (writing code, building data pipelines or models, analyzing data, or supporting and administering computer systems)?", {
-    true: "The day-to-day work is writing software, building data pipelines or machine learning models, analyzing data, or supporting and administering IT systems",
-    false: "Hardware or mechanical engineering, product management, sales, marketing, finance, pure academic research, or anything else",
-  }),
   level: choice("What level is this posting?", {
     internship: "Internship, co-op, student or work term",
     new_grad: "New grad, early career, entry level, or junior with 0 to 2 years",
@@ -137,10 +139,17 @@ export async function rateJob(jev: JevClient, job: Job, profile: Profile, now = 
     answers = await jev.decide(buildFitState(job, profile, now), fitQuestions(profile), `rate:${job.company}:${job.title}`);
     cache?.set(key, answers);
   }
-  return scoreFromAnswers(job, answers, now, usStatus(profile));
+  return scoreFromAnswers(job, answers, now, usStatus(profile), { levels: profile.preferences.levels ?? [] });
 }
 
-export function scoreFromAnswers(job: Job, answers: Record<string, Answer>, now = new Date(), us: { authorized: boolean; citizen: boolean } = { authorized: false, citizen: false }): FitResult {
+export function scoreFromAnswers(
+  job: Job,
+  answers: Record<string, Answer>,
+  now = new Date(),
+  us: { authorized: boolean; citizen: boolean } = { authorized: false, citizen: false },
+  /** The levels the search is for, from the profile. Empty means every level suits. */
+  wants: { levels?: readonly string[] } = {},
+): FitResult {
   // A rating saved before a question existed simply lacks it; that reads as "no".
   const n = (k: string) => (answers[k] as NoulAnswer | undefined)?.noul ?? 0;
   const c = (k: string) => answers[k] as ChoiceAnswer;
@@ -150,9 +159,15 @@ export function scoreFromAnswers(job: Job, answers: Record<string, Answer>, now 
   const codeTier = locationTier(job.locations);
   const tier: LocationTier = codeTier !== "unclear" ? codeTier : (c("location_tier").choice as LocationTier);
 
+  // Asked only when the profile names the kind of work it wants, so a question that was never put
+  // sets nothing aside. "is_software_role" is what the question used to be called, and a rating
+  // saved under that name is still honoured.
+  const roleKey = "is_wanted_role" in answers ? "is_wanted_role" : "is_software_role" in answers ? "is_software_role" : null;
+  const wantedLevels = wants.levels ?? [];
+
   let skipReason: string | null = null;
-  if (n("is_software_role") < 0.5) skipReason = "not a software role";
-  else if (c("level").choice === "experienced" && c("level").confidence >= 0.6) skipReason = "requires professional experience";
+  if (roleKey && n(roleKey) < 0.5) skipReason = "not the kind of work you asked for";
+  else if (wantedLevels.length > 0 && !wantedLevels.includes("experienced") && c("level").choice === "experienced" && c("level").confidence >= 0.6) skipReason = "requires professional experience";
   else if (n("is_unpaid") > 0.7) skipReason = "unpaid";
   else if (n("needs_advanced_degree") > 0.7) skipReason = "advanced degree required";
   else if (c("work_auth").choice === "us_no_sponsorship" && c("work_auth").confidence >= 0.5 && !us.authorized) skipReason = "US role, no sponsorship";
@@ -160,7 +175,7 @@ export function scoreFromAnswers(job: Job, answers: Record<string, Answer>, now 
   else if (job.ats === "other" && n("needs_account") > 0.9) skipReason = "needs an account to apply";
   else if (n("requires_references") > 0.85) skipReason = "references required";
 
-  const levelFit = { internship: 1, new_grad: 1, experienced: 0.1, other: 0.3 }[c("level").choice] ?? 0.3;
+  const levelFit = levelFitFor(c("level").choice, wantedLevels);
   const termFit = { summer: 1, new_grad: 1, winter: 0.8, earlier: 0.3, other: 0.5 }[c("term").choice] ?? 0.5;
   const components = {
     stackMatch: scoreToUnit(s("stack_match").score, LEVELS5.length),

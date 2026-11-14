@@ -5,18 +5,9 @@
  */
 import { DISCOVER } from "../config.js";
 import { inAreas } from "./areas.js";
+import { wantsTitle } from "./wanted.js";
 import { ageDays, destinationOf, type Job } from "./normalize.js";
 import { isWalled } from "./walled.js";
-
-const NON_SOFTWARE_TITLE =
-  /\b(hardware|mechanical|electrical|civil|chemical|aerospace|manufacturing|industrial|process|structural|rf|asic|fpga|pcb|silicon|analog|mixed[- ]signal|product manager|program manager|project manager|technical program|product design|ux|ui designer|graphic|marketing|sales|recruit|finance intern|accounting|legal|hr |human resources|supply chain|operations analyst|business analyst|data scientist|data science|data analyst|quant|trading|research scientist|phd|postdoc|technician|physical|optics|photonics|materials|biomed|clinical|nurse|teacher)\b/i;
-
-/** A title that matches NON_SOFTWARE_TITLE is rescued when it also says one of these. */
-const SOFTWARE_TITLE = /software|developer|programm|full[- ]stack|backend|frontend|front[- ]end|back[- ]end|\bswe\b|web engineer|mobile engineer|platform engineer/i;
-
-/** Data, ML/AI, analytics and IT support titles are in scope too, so they rescue a NON_SOFTWARE_TITLE match. */
-const DATA_OR_IT_TITLE =
-  /\bdata\b|machine learning|\bml\b|\bai\b|analytics|artificial intelligence|\bit\b|help ?desk|desk ?side|systems? (support|admin)|support (engineer|specialist|analyst|technician)|technical support/i;
 
 const FRENCH_TITLE = /\b(stagiaire|développeur|developpeur|ingénieur|ingenieur|stage\b|alternance|poste)\b/i;
 
@@ -54,8 +45,8 @@ export function preFilter(
   maxAgeDays: number = DISCOVER.maxAgeDays,
   /** True for a job on an account board where the person has an account, or let the tool make one. */
   mayApplyWithAccount: (url: string) => boolean = () => false,
-  /** The places the person works in, from the profile. Empty narrows nothing. */
-  areas: readonly string[] = [],
+  /** What the person asked their search to cover, from the profile. Everything empty narrows nothing. */
+  wants: { areas?: readonly string[]; roleWords?: readonly string[] } = {},
 ): string | null {
   const link = destinationOf(job);
   if (job.ats === "workday" && !mayApplyWithAccount(link)) return "workday (needs an account per company)";
@@ -65,12 +56,10 @@ export function preFilter(
   if (job.ats === "indeed") return "indeed (apply on the employer's own site, by hand)";
   if (walled(link)) return "careers site needs an account";
   if ((DISCOVER.unreadableAts as readonly string[]).includes(job.ats)) return `${job.ats} (its form cannot be read yet)`;
-  if (!inAreas(job.locations, areas)) return "not in the places you work in";
+  if (!inAreas(job.locations, wants.areas ?? [])) return "not in the places you work in";
   const age = ageDays(job, now);
   if (age !== null && age > maxAgeDays) return `posted ${age} days ago`;
-  if (NON_SOFTWARE_TITLE.test(job.title) && !SOFTWARE_TITLE.test(job.title) && !DATA_OR_IT_TITLE.test(job.title)) {
-    return "title is not a software role";
-  }
+  if (!wantsTitle(job.title, wants.roleWords ?? [])) return "title is not the kind of work you asked for";
   if (FRENCH_TITLE.test(job.title)) return "non-English posting";
   if (job.degrees.length && !job.degrees.some((d) => /bachelor|associate|bootcamp|certificate/i.test(d))) {
     return "advanced degree required";
